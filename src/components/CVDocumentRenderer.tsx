@@ -57,7 +57,7 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
   };
 
   const baseSizePx =
-    cv.style.fontSize === 'sm' ? 10 : cv.style.fontSize === 'lg' ? 12 : 11;
+    cv.style.fontSize === 'sm' ? 11 : cv.style.fontSize === 'lg' ? 13 : 12;
 
   const visibleSections = cv.style.sectionOrder.filter(
     (s) => !cv.style.hiddenSections.includes(s)
@@ -180,7 +180,11 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
     switch (key) {
       case 'summary': {
         const text = cv.useObjectiveInsteadOfSummary ? cv.careerObjective : cv.summary;
-        return <p className="leading-relaxed text-slate-700 whitespace-pre-line">{text}</p>;
+        return (
+          <p className="leading-relaxed text-slate-700 whitespace-pre-line break-words [overflow-wrap:anywhere]">
+            {text}
+          </p>
+        );
       }
 
       case 'experience':
@@ -231,9 +235,9 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
               }
 
               return (
-                <div key={exp.id} className="cv-avoid-break">
+                <div key={exp.id} className="cv-avoid-break min-w-0 break-words [overflow-wrap:anywhere]">
                   <div className="flex items-baseline justify-between gap-2">
-                    <div className="font-bold text-slate-900">
+                    <div className="font-bold text-slate-900 min-w-0 break-words">
                       {exp.jobTitle || 'Role'}
                     </div>
                     <div className="text-slate-500 shrink-0 tabular-nums" style={{ fontSize: `${baseSizePx - 1}px` }}>
@@ -241,11 +245,11 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
                     </div>
                   </div>
                   <div className="flex items-baseline justify-between gap-2 mb-1">
-                    <span className="font-semibold" style={{ color: accent }}>
+                    <span className="font-semibold min-w-0 break-words" style={{ color: accent }}>
                       {exp.company}
                     </span>
                     {exp.location && (
-                      <span className="text-slate-500" style={{ fontSize: `${baseSizePx - 1}px` }}>
+                      <span className="text-slate-500 shrink-0" style={{ fontSize: `${baseSizePx - 1}px` }}>
                         {exp.location}
                       </span>
                     )}
@@ -280,7 +284,7 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
           <div className="space-y-2.5">
             {cv.education.map((edu) => (
               <div key={edu.id} className="cv-avoid-break flex items-baseline justify-between gap-3">
-                <div>
+                <div className="min-w-0 break-words [overflow-wrap:anywhere]">
                   <div className="font-bold text-slate-900">
                     {[edu.qualification, edu.fieldOfStudy].filter(Boolean).join(' — ')}
                   </div>
@@ -522,7 +526,7 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
     );
 
     const mainCol = (
-      <div className="flex-1 p-7">
+      <div className="flex-1 min-w-0 p-7 break-words [overflow-wrap:anywhere]">
         <header className="mb-5 pb-4 border-b-2" style={{ borderColor: accent }}>
           <h1 className="font-bold text-slate-900 leading-tight" style={{ fontSize: `${baseSizePx * 2.1}px` }}>
             {cv.personal.fullName || 'Your Full Name'}
@@ -557,7 +561,7 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
   return (
     <div
       id={id}
-      className={`cv-page-sheet bg-white text-slate-900 shadow-sm border border-slate-200 mx-auto overflow-hidden ${className}`}
+      className={`cv-page-sheet bg-white text-slate-900 shadow-sm border border-slate-200 mx-auto overflow-hidden break-words [overflow-wrap:anywhere] ${className}`}
       style={{
         width: '210mm',
         minHeight: '297mm',
@@ -579,7 +583,7 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
               className="px-9 py-6 text-white flex items-center justify-between gap-6"
               style={{ backgroundColor: accent }}
             >
-              <div>
+              <div className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">
                 <h1
                   className="font-bold leading-tight"
                   style={{ fontSize: `${baseSizePx * 2.1}px` }}
@@ -647,7 +651,7 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
                   </div>
                   {photoBox('w-20 h-20', 'rounded-md')}
                 </div>
-                <div className="col-span-8">
+                <div className="col-span-8 min-w-0 break-words [overflow-wrap:anywhere]">
                   <h1 className="font-bold text-slate-900" style={{ fontSize: `${baseSizePx * 2.0}px` }}>
                     {cv.personal.fullName || 'Your Full Name'}
                   </h1>
@@ -678,7 +682,7 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
                 isATS ? 'border-b border-slate-900' : 'border-b border-slate-200'
               }`}
             >
-              <div>
+              <div className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">
                 <h1 className="font-bold text-slate-900 leading-tight" style={{ fontSize: `${baseSizePx * 2.1}px` }}>
                   {cv.personal.fullName || 'Your Full Name'}
                 </h1>

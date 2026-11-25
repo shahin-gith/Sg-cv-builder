@@ -3,6 +3,12 @@ import { getTemplateById, SECTION_LABELS } from '../data/templates';
 import { CVDocument, CVFontFamily, CVFontSize, CVSectionKey } from '../types/cv';
 import { formatDateRange } from './cvLogic';
 import { encodeCVMetadataPayload } from './pdfMetadata';
+import {
+  getPdfLayoutVariant,
+  isSectorCredentialTemplate,
+  sanitizePdfText,
+  wrapPdfLines,
+} from './pdfText';
 
 function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace('#', '');
@@ -20,7 +26,7 @@ function mapPdfFont(family: CVFontFamily): 'helvetica' | 'times' {
 }
 
 function getBaseFontSize(size: CVFontSize): number {
-  if (size === 'sm') return 9;
+  if (size === 'sm') return 9.5;
   if (size === 'lg') return 11;
   return 10;
 }
@@ -34,7 +40,7 @@ function sanitizeFileName(name: string): string {
   );
 }
 
-export async function exportCVToPDF(cv: CVDocument): Promise<void> {
+export function buildCVPdfDocument(cv: CVDocument): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -42,10 +48,11 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
     compress: true,
   });
 
+  doc.setCharSpace(0);
   doc.setProperties({
-    title: cv.name || 'CV Document',
+    title: sanitizePdfText(cv.name) || 'CV Document',
     subject: 'CareerCraft SG Structured CV',
-    author: cv.personal.fullName || 'Applicant',
+    author: sanitizePdfText(cv.personal.fullName) || 'Applicant',
     keywords: encodeCVMetadataPayload(cv),
     creator: 'CareerCraft SG',
   });
@@ -54,30 +61,26 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
   const pageWidth = 210;
   const pageHeight = 297;
   const marginX = 15;
-  const marginTop = 16;
-  const marginBottom = 16;
-  const contentWidth = pageWidth - marginX * 2;
+  const marginTop = 15;
+  const marginBottom = 15;
+  const contentWidth = pageWidth - marginX * 2; // 180mm
 
   const fontName = mapPdfFont(cv.style.fontFamily);
   const basePt = getBaseFontSize(cv.style.fontSize);
-  const lineMm = basePt * 0.44;
+  const stepMm = (pt: number) => pt * 0.46;
   const accent = hexToRgb(cv.style.accentColor || tpl.defaultAccentColor);
   const showPhoto = tpl.supportsPhoto && cv.style.showPhoto && Boolean(cv.personal.photoUrl);
 
+  const variant = getPdfLayoutVariant(cv.templateId);
+  const isHeaderBand = variant === 'header-band';
+  const isCenteredHeader = variant === 'centered';
+  const isEuropass = variant === 'europass';
   const isSidebarLayout =
     cv.templateId === 'modern-professional' ||
     cv.templateId === 'office-admin' ||
-    cv.templateId === 'technician-cv';
-
-  const isHeaderBand =
-    cv.templateId === 'executive-cv' ||
-    cv.templateId === 'construction-worker' ||
-    cv.templateId === 'driver-cv';
-
-  const isEuropass =
-    cv.templateId === 'europass-inspired' || cv.templateId === 'european-cv';
-
-  const isCenteredHeader = cv.templateId === 'classic-professional';
+    cv.templateId === 'hotel-hospitality' ||
+    cv.templateId === 'healthcare-nursing' ||
+    cv.templateId === 'retail-customer-service';
 
   let cursorY = marginTop;
 
@@ -88,6 +91,27 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
     }
   };
 
+  const setFontSafe = (
+    pt: number,
+    style: 'normal' | 'bold' | 'italic' = 'normal',
+    color: [number, number, number] = [30, 41, 59]
+  ) => {
+    doc.setFont(fontName, style);
+    doc.setFontSize(pt);
+    doc.setCharSpace(0);
+    doc.setTextColor(color[0], color[1], color[2]);
+  };
+
+  const getLines = (
+    text: string,
+    maxWidth: number,
+    pt: number,
+    style: 'normal' | 'bold' | 'italic' = 'normal'
+  ): string[] => {
+    setFontSafe(pt, style);
+    return wrapPdfLines((s) => doc.getTextWidth(s), text, maxWidth);
+  };
+
   const drawWrappedText = (
     text: string,
     x: number,
@@ -95,19 +119,48 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
     pt: number,
     style: 'normal' | 'bold' | 'italic' = 'normal',
     color: [number, number, number] = [30, 41, 59],
-    extraSpacing = 1.2
+    extraSpacing = 1.2,
+    align: 'left' | 'center' = 'left'
   ) => {
-    if (!text.trim()) return;
-    doc.setFont(fontName, style);
-    doc.setFontSize(pt);
-    doc.setTextColor(color[0], color[1], color[2]);
-    const lines = doc.splitTextToSize(text, maxWidth) as string[];
-    const step = pt * 0.43;
+    const lines = getLines(text, maxWidth, pt, style);
+    if (lines.length === 0) return;
+    setFontSafe(pt, style, color);
+    const step = stepMm(pt);
     for (const line of lines) {
       ensureSpace(step + 1);
-      doc.text(line, x, cursorY);
+      doc.text(line, x, cursorY, align === 'center' ? { align: 'center' } : undefined);
       cursorY += step;
     }
+    cursorY += extraSpacing;
+  };
+
+  const drawHangingBullet = (
+    prefix: string,
+    text: string,
+    x: number,
+    maxWidth: number,
+    pt: number,
+    style: 'normal' | 'bold' | 'italic' = 'normal',
+    color: [number, number, number] = [51, 65, 85],
+    extraSpacing = 0.6
+  ) => {
+    const cleaned = sanitizePdfText(text);
+    if (!cleaned) return;
+    setFontSafe(pt, style, color);
+    const indent = doc.getTextWidth(prefix) + 1.5;
+    const textWidth = Math.max(20, maxWidth - indent);
+    const lines = wrapPdfLines((s) => doc.getTextWidth(s), cleaned, textWidth);
+    if (lines.length === 0) return;
+    const step = stepMm(pt);
+
+    lines.forEach((line, idx) => {
+      ensureSpace(step + 1);
+      if (idx === 0) {
+        doc.text(prefix, x, cursorY);
+      }
+      doc.text(line, x + indent, cursorY);
+      cursorY += step;
+    });
     cursorY += extraSpacing;
   };
 
@@ -127,125 +180,185 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
     cv.personal.address,
     cv.personal.linkedin,
     cv.personal.website,
-  ].filter((v) => v && v.trim());
+  ]
+    .map((v) => sanitizePdfText(v))
+    .filter(Boolean);
 
   const optionalMetaItems = [
-    cv.personal.nationality ? `Nationality: ${cv.personal.nationality}` : '',
+    cv.personal.nationality ? `Nationality: ${sanitizePdfText(cv.personal.nationality)}` : '',
     cv.personal.dateOfBirth && cv.templateId !== 'canadian-resume'
-      ? `DOB: ${cv.personal.dateOfBirth}`
+      ? `DOB: ${sanitizePdfText(cv.personal.dateOfBirth)}`
       : '',
   ].filter(Boolean);
 
+  const fullNameText = sanitizePdfText(cv.personal.fullName) || 'Unnamed Candidate';
+  const titleText = sanitizePdfText(cv.personal.professionalTitle);
+
   // HEADER RENDERING
   if (isHeaderBand) {
+    const textMaxW = showPhoto ? contentWidth - 30 : contentWidth;
+    const nameLines = getLines(fullNameText, textMaxW, 18, 'bold');
+    const titleLines = titleText ? getLines(titleText, textMaxW, 11, 'normal') : [];
+    const contactLines =
+      contactItems.length > 0 ? getLines(contactItems.join('  |  '), textMaxW, 8.5, 'normal') : [];
+    const metaLines =
+      optionalMetaItems.length > 0
+        ? getLines(optionalMetaItems.join('  |  '), textMaxW, 8, 'normal')
+        : [];
+
+    const textBlockHeight =
+      nameLines.length * stepMm(18) +
+      (titleLines.length > 0 ? 1 + titleLines.length * stepMm(11) : 0) +
+      (contactLines.length > 0 ? 1.5 + contactLines.length * stepMm(8.5) : 0) +
+      (metaLines.length > 0 ? 1 + metaLines.length * stepMm(8) : 0);
+
+    const headerHeight = Math.max(showPhoto ? 38 : 32, 12 + textBlockHeight + 6);
     doc.setFillColor(accent[0], accent[1], accent[2]);
-    doc.rect(0, 0, pageWidth, 38, 'F');
+    doc.rect(0, 0, pageWidth, headerHeight, 'F');
 
-    const textMaxW = showPhoto ? contentWidth - 28 : contentWidth;
-    doc.setFont(fontName, 'bold');
-    doc.setFontSize(20);
-    doc.setTextColor(255, 255, 255);
-    doc.text(cv.personal.fullName || 'Unnamed Candidate', marginX, 15);
-
-    if (cv.personal.professionalTitle) {
-      doc.setFont(fontName, 'normal');
-      doc.setFontSize(11);
-      doc.setTextColor(226, 232, 240);
-      doc.text(cv.personal.professionalTitle, marginX, 22);
+    let headerY = 12;
+    setFontSafe(18, 'bold', [255, 255, 255]);
+    for (const line of nameLines) {
+      doc.text(line, marginX, headerY);
+      headerY += stepMm(18);
     }
 
-    if (contactItems.length > 0) {
-      doc.setFont(fontName, 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(241, 245, 249);
-      const contactLines = doc.splitTextToSize(contactItems.join('  •  '), textMaxW) as string[];
-      doc.text(contactLines.slice(0, 2), marginX, 28.5);
+    if (titleLines.length > 0) {
+      headerY += 0.8;
+      setFontSafe(11, 'normal', [241, 245, 249]);
+      for (const line of titleLines) {
+        doc.text(line, marginX, headerY);
+        headerY += stepMm(11);
+      }
+    }
+
+    if (contactLines.length > 0) {
+      headerY += 1.5;
+      setFontSafe(8.5, 'normal', [241, 245, 249]);
+      for (const line of contactLines) {
+        doc.text(line, marginX, headerY);
+        headerY += stepMm(8.5);
+      }
+    }
+
+    if (metaLines.length > 0) {
+      headerY += 0.8;
+      setFontSafe(8, 'normal', [226, 232, 240]);
+      for (const line of metaLines) {
+        doc.text(line, marginX, headerY);
+        headerY += stepMm(8);
+      }
     }
 
     if (showPhoto) {
       addPhotoIfPresent(pageWidth - marginX - 24, 7, 24, 24);
     }
-    cursorY = 46;
+    cursorY = headerHeight + 7;
   } else if (isCenteredHeader) {
     if (showPhoto) {
       addPhotoIfPresent(pageWidth / 2 - 11, cursorY, 22, 22);
       cursorY += 26;
     }
-    doc.setFont(fontName, 'bold');
-    doc.setFontSize(19);
-    doc.setTextColor(15, 23, 42);
-    doc.text(cv.personal.fullName || 'Unnamed Candidate', pageWidth / 2, cursorY, {
-      align: 'center',
-    });
-    cursorY += 6.5;
 
-    if (cv.personal.professionalTitle) {
-      doc.setFont(fontName, 'italic');
-      doc.setFontSize(11);
-      doc.setTextColor(accent[0], accent[1], accent[2]);
-      doc.text(cv.personal.professionalTitle, pageWidth / 2, cursorY, { align: 'center' });
-      cursorY += 5.5;
+    drawWrappedText(
+      fullNameText,
+      pageWidth / 2,
+      contentWidth,
+      18,
+      'bold',
+      [15, 23, 42],
+      0.8,
+      'center'
+    );
+
+    if (titleText) {
+      drawWrappedText(
+        titleText,
+        pageWidth / 2,
+        contentWidth,
+        11,
+        'italic',
+        accent,
+        1,
+        'center'
+      );
     }
 
     if (contactItems.length > 0) {
-      doc.setFont(fontName, 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(71, 85, 105);
-      const lines = doc.splitTextToSize(contactItems.join('  |  '), contentWidth) as string[];
-      for (const l of lines) {
-        doc.text(l, pageWidth / 2, cursorY, { align: 'center' });
-        cursorY += 4;
-      }
+      drawWrappedText(
+        contactItems.join('  |  '),
+        pageWidth / 2,
+        contentWidth,
+        8.5,
+        'normal',
+        [71, 85, 105],
+        1,
+        'center'
+      );
     }
-    cursorY += 2;
+
+    if (optionalMetaItems.length > 0) {
+      drawWrappedText(
+        optionalMetaItems.join('  |  '),
+        pageWidth / 2,
+        contentWidth,
+        8,
+        'normal',
+        [100, 116, 139],
+        1,
+        'center'
+      );
+    }
+
+    cursorY += 1.5;
     doc.setDrawColor(accent[0], accent[1], accent[2]);
     doc.setLineWidth(0.5);
     doc.line(marginX, cursorY, pageWidth - marginX, cursorY);
     cursorY += 6;
   } else {
-    // Standard / European / Sidebar top header
-    const textMaxW = showPhoto ? contentWidth - 28 : contentWidth;
+    const textMaxW = showPhoto ? contentWidth - 30 : contentWidth;
     const headerStartY = cursorY;
 
     if (cv.templateId === 'europass-inspired') {
-      doc.setFont(fontName, 'bold');
-      doc.setFontSize(8.5);
-      doc.setTextColor(accent[0], accent[1], accent[2]);
-      doc.text('CURRICULUM VITAE · EUROPASS-INSPIRED FORMAT', marginX, cursorY);
-      cursorY += 6;
+      drawWrappedText(
+        'CURRICULUM VITAE | EUROPASS-INSPIRED FORMAT',
+        marginX,
+        textMaxW,
+        8.5,
+        'bold',
+        accent,
+        1.5
+      );
     }
 
-    doc.setFont(fontName, 'bold');
-    doc.setFontSize(19);
-    doc.setTextColor(15, 23, 42);
-    doc.text(cv.personal.fullName || 'Unnamed Candidate', marginX, cursorY);
-    cursorY += 6.5;
+    drawWrappedText(fullNameText, marginX, textMaxW, 18, 'bold', [15, 23, 42], 0.8);
 
-    if (cv.personal.professionalTitle) {
-      doc.setFont(fontName, 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(accent[0], accent[1], accent[2]);
-      doc.text(cv.personal.professionalTitle, marginX, cursorY);
-      cursorY += 5.5;
+    if (titleText) {
+      drawWrappedText(titleText, marginX, textMaxW, 11, 'bold', accent, 1);
     }
 
     if (contactItems.length > 0) {
-      doc.setFont(fontName, 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(71, 85, 105);
-      const contactLines = doc.splitTextToSize(contactItems.join('  ·  '), textMaxW) as string[];
-      for (const line of contactLines) {
-        doc.text(line, marginX, cursorY);
-        cursorY += 4;
-      }
+      drawWrappedText(
+        contactItems.join('  |  '),
+        marginX,
+        textMaxW,
+        8.5,
+        'normal',
+        [71, 85, 105],
+        0.8
+      );
     }
 
-    if (optionalMetaItems.length > 0) {
-      doc.setFont(fontName, 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text(optionalMetaItems.join('  ·  '), marginX, cursorY);
-      cursorY += 4;
+    if (optionalMetaItems.length > 0 && cv.templateId !== 'canadian-resume' && cv.templateId !== 'ats-friendly') {
+      drawWrappedText(
+        optionalMetaItems.join('  |  '),
+        marginX,
+        textMaxW,
+        8,
+        'normal',
+        [100, 116, 139],
+        0.8
+      );
     }
 
     if (showPhoto) {
@@ -260,30 +373,135 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
     cursorY += 6;
   }
 
+  // SINGAPORE SECTOR CREDENTIAL HIGHLIGHT STRIP
+  if (
+    isSectorCredentialTemplate(cv.templateId) &&
+    (cv.certifications.length > 0 || Boolean(cv.drivingLicence.classes.trim()))
+  ) {
+    const stripPadding = 3.5;
+    const stripTextW = contentWidth - stripPadding * 2;
+    const stripLines: { label: string; value: string }[] = [];
+
+    if (
+      (cv.templateId === 'heavy-driver-logistics' || cv.templateId === 'driver-cv') &&
+      cv.drivingLicence.classes.trim()
+    ) {
+      const dlText = [
+        sanitizePdfText(cv.drivingLicence.classes),
+        cv.drivingLicence.issuingCountry
+          ? `(${sanitizePdfText(cv.drivingLicence.issuingCountry)})`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+      stripLines.push({ label: 'DRIVING LICENCE:', value: dlText });
+    }
+
+    if (cv.certifications.length > 0) {
+      const certLabel =
+        cv.templateId === 'marine-shipyard'
+          ? 'MARINE & SHIPYARD TICKETS:'
+          : cv.templateId === 'restaurant-fnb'
+          ? 'SFA FOOD HYGIENE & CULINARY:'
+          : cv.templateId === 'security-safety'
+          ? 'PLRD & WSH CREDENTIALS:'
+          : cv.templateId === 'process-oil-gas'
+          ? 'PROCESS & PLANT SAFETY:'
+          : 'VERIFIED CREDENTIALS:';
+      const certList = cv.certifications
+        .map((c) => sanitizePdfText(c.name))
+        .filter(Boolean)
+        .join(' | ');
+      if (certList) {
+        stripLines.push({ label: certLabel, value: certList });
+      }
+    }
+
+    if (stripLines.length > 0) {
+      const wrappedEntries = stripLines.map((entry) => ({
+        lines: getLines(`${entry.label} ${entry.value}`, stripTextW, 8.5, 'normal'),
+      }));
+      const totalStripLines = wrappedEntries.reduce((sum, item) => sum + item.lines.length, 0);
+      const boxHeight = stripPadding * 2 + totalStripLines * stepMm(8.5) + 1;
+
+      ensureSpace(boxHeight + 4);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(marginX, cursorY, contentWidth, boxHeight, 1.5, 1.5, 'FD');
+
+      let stripY = cursorY + stripPadding + 2.5;
+      setFontSafe(8.5, 'normal', [30, 41, 59]);
+      for (const entry of wrappedEntries) {
+        for (const line of entry.lines) {
+          doc.text(line, marginX + stripPadding, stripY);
+          stripY += stepMm(8.5);
+        }
+      }
+      cursorY += boxHeight + 5;
+    }
+  }
+
   const drawSectionHeading = (title: string) => {
     ensureSpace(14);
     cursorY += 2;
     if (isEuropass) {
-      doc.setFont(fontName, 'bold');
-      doc.setFontSize(basePt + 0.5);
-      doc.setTextColor(accent[0], accent[1], accent[2]);
-      doc.text(title.toUpperCase(), marginX, cursorY);
+      const leftLines = getLines(title.toUpperCase(), 40, basePt - 0.5, 'bold');
       doc.setDrawColor(226, 232, 240);
       doc.setLineWidth(0.3);
-      doc.line(marginX + 44, cursorY - 1, pageWidth - marginX, cursorY - 1);
-      cursorY += 5;
+      doc.line(marginX + 44, cursorY - 1.5, pageWidth - marginX, cursorY - 1.5);
+      setFontSafe(basePt - 0.5, 'bold', accent);
+      let leftY = cursorY;
+      for (const line of leftLines) {
+        doc.text(line, marginX, leftY);
+        leftY += stepMm(basePt - 0.5);
+      }
+      if (leftLines.length > 1) {
+        cursorY += (leftLines.length - 1) * stepMm(basePt - 0.5);
+      }
+      cursorY += 2.5;
       return;
     }
 
-    doc.setFont(fontName, 'bold');
-    doc.setFontSize(basePt + 1);
-    doc.setTextColor(accent[0], accent[1], accent[2]);
-    doc.text(title.toUpperCase(), marginX, cursorY);
-    cursorY += 1.5;
+    const headingLines = getLines(title.toUpperCase(), contentWidth, basePt + 0.8, 'bold');
+    setFontSafe(basePt + 0.8, 'bold', accent);
+    for (const line of headingLines) {
+      doc.text(line, marginX, cursorY);
+      cursorY += stepMm(basePt + 0.8);
+    }
+    cursorY -= 1.2;
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.3);
     doc.line(marginX, cursorY, pageWidth - marginX, cursorY);
     cursorY += 4.5;
+  };
+
+  const drawTitleWithRightDate = (
+    title: string,
+    dateText: string,
+    x: number,
+    maxWidth: number,
+    pt: number
+  ) => {
+    const cleanDate = sanitizePdfText(dateText);
+    setFontSafe(pt - 1, 'normal', [100, 116, 139]);
+    const dateWidth = cleanDate ? doc.getTextWidth(cleanDate) + 5 : 0;
+    const titleMaxWidth = Math.max(40, maxWidth - dateWidth);
+
+    const titleLines = getLines(title, titleMaxWidth, pt, 'bold');
+    const step = stepMm(pt);
+    ensureSpace(Math.max(step, titleLines.length * step) + 4);
+
+    if (cleanDate) {
+      setFontSafe(pt - 1, 'normal', [100, 116, 139]);
+      doc.text(cleanDate, pageWidth - marginX, cursorY, { align: 'right' });
+    }
+
+    setFontSafe(pt, 'bold', [15, 23, 42]);
+    for (const line of titleLines) {
+      doc.text(line, x, cursorY);
+      cursorY += step;
+    }
   };
 
   const renderSection = (key: CVSectionKey) => {
@@ -293,7 +511,7 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
     switch (key) {
       case 'summary': {
         const text = cv.useObjectiveInsteadOfSummary ? cv.careerObjective : cv.summary;
-        if (!text.trim()) return;
+        if (!sanitizePdfText(text)) return;
         drawSectionHeading(
           cv.useObjectiveInsteadOfSummary ? 'Career Objective' : SECTION_LABELS.summary
         );
@@ -307,26 +525,20 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         for (const exp of cv.experience) {
           ensureSpace(18);
           const dateRange = formatDateRange(exp.startDate, exp.endDate, exp.current);
-          doc.setFont(fontName, 'bold');
-          doc.setFontSize(basePt + 0.3);
-          doc.setTextColor(15, 23, 42);
-          doc.text(exp.jobTitle || 'Role', labelX, cursorY);
+          drawTitleWithRightDate(
+            sanitizePdfText(exp.jobTitle) || 'Role',
+            dateRange,
+            labelX,
+            labelWidth,
+            basePt + 0.3
+          );
 
-          if (dateRange) {
-            doc.setFont(fontName, 'normal');
-            doc.setFontSize(basePt - 1);
-            doc.setTextColor(100, 116, 139);
-            doc.text(dateRange, pageWidth - marginX, cursorY, { align: 'right' });
-          }
-          cursorY += lineMm;
-
-          const subLine = [exp.company, exp.location].filter(Boolean).join(' · ');
+          const subLine = [exp.company, exp.location]
+            .map((v) => sanitizePdfText(v))
+            .filter(Boolean)
+            .join(' | ');
           if (subLine) {
-            doc.setFont(fontName, 'bold');
-            doc.setFontSize(basePt - 0.5);
-            doc.setTextColor(accent[0], accent[1], accent[2]);
-            doc.text(subLine, labelX, cursorY);
-            cursorY += lineMm;
+            drawWrappedText(subLine, labelX, labelWidth, basePt - 0.5, 'bold', accent, 0.8);
           }
 
           const bullets = exp.responsibilities
@@ -334,7 +546,7 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
             .map((l) => l.trim())
             .filter(Boolean);
           for (const b of bullets) {
-            drawWrappedText(`•  ${b}`, labelX + 2, labelWidth - 2, basePt - 0.5, 'normal', [51, 65, 85], 0.4);
+            drawHangingBullet('-', b, labelX + 1.5, labelWidth - 1.5, basePt - 0.4, 'normal', [51, 65, 85], 0.5);
           }
 
           const achLines = exp.achievements
@@ -343,10 +555,10 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
             .filter(Boolean);
           if (achLines.length > 0) {
             for (const a of achLines) {
-              drawWrappedText(`★  ${a}`, labelX + 2, labelWidth - 2, basePt - 0.5, 'italic', [15, 23, 42], 0.4);
+              drawHangingBullet('*', a, labelX + 1.5, labelWidth - 1.5, basePt - 0.4, 'italic', [15, 23, 42], 0.5);
             }
           }
-          cursorY += 2.5;
+          cursorY += 2.2;
         }
         break;
       }
@@ -357,21 +569,12 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         for (const edu of cv.education) {
           ensureSpace(12);
           const range = formatDateRange(edu.startDate, edu.graduationDate, false);
-          doc.setFont(fontName, 'bold');
-          doc.setFontSize(basePt);
-          doc.setTextColor(15, 23, 42);
-          doc.text(
-            [edu.qualification, edu.fieldOfStudy].filter(Boolean).join(' in ') || 'Qualification',
-            labelX,
-            cursorY
-          );
-          if (range) {
-            doc.setFont(fontName, 'normal');
-            doc.setFontSize(basePt - 1);
-            doc.setTextColor(100, 116, 139);
-            doc.text(range, pageWidth - marginX, cursorY, { align: 'right' });
-          }
-          cursorY += lineMm;
+          const qualTitle =
+            [edu.qualification, edu.fieldOfStudy]
+              .map((v) => sanitizePdfText(v))
+              .filter(Boolean)
+              .join(' in ') || 'Qualification';
+          drawTitleWithRightDate(qualTitle, range, labelX, labelWidth, basePt);
           if (edu.institution) {
             drawWrappedText(edu.institution, labelX, labelWidth, basePt - 0.5, 'normal', [71, 85, 105], 1.5);
           }
@@ -388,7 +591,7 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         drawSectionHeading(SECTION_LABELS.skills);
         if (cv.skills.technical.length > 0) {
           drawWrappedText(
-            `Technical: ${cv.skills.technical.join(' · ')}`,
+            `Technical: ${cv.skills.technical.join(' | ')}`,
             labelX,
             labelWidth,
             basePt - 0.3,
@@ -399,7 +602,7 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         }
         if (cv.skills.industry.length > 0) {
           drawWrappedText(
-            `Industry & Compliance: ${cv.skills.industry.join(' · ')}`,
+            `Industry & Compliance: ${cv.skills.industry.join(' | ')}`,
             labelX,
             labelWidth,
             basePt - 0.3,
@@ -410,7 +613,7 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         }
         if (cv.skills.soft.length > 0) {
           drawWrappedText(
-            `Interpersonal: ${cv.skills.soft.join(' · ')}`,
+            `Core & Soft: ${cv.skills.soft.join(' | ')}`,
             labelX,
             labelWidth,
             basePt - 0.3,
@@ -426,11 +629,22 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         if (cv.certifications.length === 0) return;
         drawSectionHeading(SECTION_LABELS.certifications);
         for (const cert of cv.certifications) {
-          ensureSpace(9);
-          const meta = [cert.issuer, cert.date, cert.credentialId ? `ID: ${cert.credentialId}` : '']
+          ensureSpace(10);
+          const dateText = cert.date ? formatDateRange(cert.date, '', false) : '';
+          drawTitleWithRightDate(
+            sanitizePdfText(cert.name) || 'Certification',
+            dateText,
+            labelX,
+            labelWidth,
+            basePt - 0.2
+          );
+          const meta = [
+            cert.issuer,
+            cert.credentialId ? `ID: ${cert.credentialId}` : '',
+          ]
+            .map((v) => sanitizePdfText(v))
             .filter(Boolean)
-            .join(' · ');
-          drawWrappedText(cert.name, labelX, labelWidth, basePt - 0.2, 'bold', [15, 23, 42], 0.3);
+            .join(' | ');
           if (meta) {
             drawWrappedText(meta, labelX, labelWidth, basePt - 1, 'normal', [100, 116, 139], 1.2);
           }
@@ -439,14 +653,15 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
       }
 
       case 'drivingLicence': {
-        if (!cv.drivingLicence.classes.trim()) return;
+        if (!sanitizePdfText(cv.drivingLicence.classes)) return;
         drawSectionHeading(SECTION_LABELS.drivingLicence);
         const line = [
           cv.drivingLicence.classes,
           cv.drivingLicence.issuingCountry ? `Issued in ${cv.drivingLicence.issuingCountry}` : '',
         ]
+          .map((v) => sanitizePdfText(v))
           .filter(Boolean)
-          .join(' · ');
+          .join(' | ');
         drawWrappedText(line, labelX, labelWidth, basePt - 0.2, 'bold', [15, 23, 42], 0.5);
         if (cv.drivingLicence.notes) {
           drawWrappedText(
@@ -466,8 +681,11 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         if (cv.languages.length === 0) return;
         drawSectionHeading(SECTION_LABELS.languages);
         const line = cv.languages
-          .map((l) => `${l.language}${l.proficiency ? ` (${l.proficiency})` : ''}`)
-          .join('  ·  ');
+          .map((l) =>
+            `${sanitizePdfText(l.language)}${l.proficiency ? ` (${sanitizePdfText(l.proficiency)})` : ''}`
+          )
+          .filter(Boolean)
+          .join('  |  ');
         drawWrappedText(line, labelX, labelWidth, basePt - 0.3, 'normal', [30, 41, 59], 1.8);
         break;
       }
@@ -477,18 +695,17 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         drawSectionHeading(SECTION_LABELS.training);
         for (const trn of cv.training) {
           ensureSpace(10);
-          drawWrappedText(
-            `${trn.title}${trn.date ? ` (${trn.date})` : ''}`,
+          const dateText = trn.date ? formatDateRange(trn.date, '', false) : '';
+          drawTitleWithRightDate(
+            sanitizePdfText(trn.title) || 'Training',
+            dateText,
             labelX,
             labelWidth,
-            basePt - 0.2,
-            'bold',
-            [15, 23, 42],
-            0.3
+            basePt - 0.2
           );
           if (trn.provider || trn.details) {
             drawWrappedText(
-              [trn.provider, trn.details].filter(Boolean).join(' — '),
+              [trn.provider, trn.details].map((v) => sanitizePdfText(v)).filter(Boolean).join(' - '),
               labelX,
               labelWidth,
               basePt - 0.8,
@@ -506,14 +723,13 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         drawSectionHeading(SECTION_LABELS.projects);
         for (const p of cv.projects) {
           ensureSpace(10);
-          drawWrappedText(
-            [p.name, p.role, p.date].filter(Boolean).join(' · '),
+          const dateText = p.date ? formatDateRange(p.date, '', false) : '';
+          drawTitleWithRightDate(
+            [p.name, p.role ? `(${p.role})` : ''].map((v) => sanitizePdfText(v)).filter(Boolean).join(' '),
+            dateText,
             labelX,
             labelWidth,
-            basePt - 0.2,
-            'bold',
-            [15, 23, 42],
-            0.3
+            basePt - 0.2
           );
           if (p.description) {
             drawWrappedText(p.description, labelX, labelWidth, basePt - 0.7, 'normal', [51, 65, 85], 1.3);
@@ -528,14 +744,12 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         for (const v of cv.volunteer) {
           ensureSpace(10);
           const range = formatDateRange(v.startDate, v.endDate, !v.endDate);
-          drawWrappedText(
-            `${v.role} — ${v.organization}${range ? ` (${range})` : ''}`,
+          drawTitleWithRightDate(
+            [v.role, v.organization].map((s) => sanitizePdfText(s)).filter(Boolean).join(' - '),
+            range,
             labelX,
             labelWidth,
-            basePt - 0.2,
-            'bold',
-            [15, 23, 42],
-            0.3
+            basePt - 0.2
           );
           if (v.description) {
             drawWrappedText(v.description, labelX, labelWidth, basePt - 0.7, 'normal', [51, 65, 85], 1.3);
@@ -550,7 +764,10 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
         for (const r of cv.references) {
           ensureSpace(8);
           drawWrappedText(
-            [r.name, r.title, r.company, r.contact].filter(Boolean).join(' · '),
+            [r.name, r.title, r.company, r.contact]
+              .map((s) => sanitizePdfText(s))
+              .filter(Boolean)
+              .join(' | '),
             labelX,
             labelWidth,
             basePt - 0.4,
@@ -570,5 +787,10 @@ export async function exportCVToPDF(cv: CVDocument): Promise<void> {
     }
   }
 
+  return doc;
+}
+
+export async function exportCVToPDF(cv: CVDocument): Promise<void> {
+  const doc = buildCVPdfDocument(cv);
   doc.save(`${sanitizeFileName(cv.name)}.pdf`);
 }

@@ -3,6 +3,7 @@ import { User } from 'firebase/auth';
 import {
   CheckCircle2,
   Cloud,
+  ExternalLink,
   FileText,
   Loader2,
   LogOut,
@@ -37,18 +38,21 @@ function formatFirebaseAuthError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err || '');
   const host = typeof window !== 'undefined' ? window.location.hostname : '';
   if (raw.includes('auth/unauthorized-domain')) {
-    return `This domain (${host || 'current URL'}) is not listed in Firebase Console → Authentication → Settings → Authorized domains. Add it there, or open the app via its authorized AI Studio / Cloud Run URL.`;
+    return `This domain (${host || 'current URL'}) is not authorized in Firebase Console → Authentication → Settings → Authorized domains. Add it there, or open the app via the live Cloud Run URL.`;
   }
   if (raw.includes('auth/popup-blocked')) {
-    return 'Google Sign-In popup was blocked by your browser. Please allow popups for this site and click "Continue with Google" again.';
+    return 'Google Sign-In popup was blocked by your browser. Allow popups for this site or use "Open App in New Tab" below.';
   }
   if (raw.includes('auth/popup-closed-by-user') || raw.includes('auth/cancelled-popup-request')) {
-    return 'Google Sign-In window was closed before finishing. Click "Continue with Google" to try again.';
+    return 'Google Sign-In popup was closed before finishing. If you are inside AI Studio preview, click "Open App in New Tab" below and sign in there.';
   }
   if (raw.includes('auth/operation-not-allowed')) {
-    return 'Google Sign-In provider is not enabled yet in Firebase Console → Authentication → Sign-in method.';
+    return 'Google Sign-In provider is disabled in Firebase Console → Authentication → Sign-in method. Enable Google there first.';
   }
-  return raw || 'Google sign-in could not complete. Please allow popups and try again.';
+  if (raw.includes('auth/internal-error') || raw.includes('auth/web-storage-unsupported')) {
+    return 'Your browser blocked third-party storage/cookies inside this embedded preview. Click "Open App in New Tab" below to sign in with Google.';
+  }
+  return raw || 'Google sign-in could not complete. Please allow popups or open in a new tab.';
 }
 
 export const AuthOtpModal: React.FC<AuthOtpModalProps> = ({
@@ -297,6 +301,23 @@ export const AuthOtpModal: React.FC<AuthOtpModalProps> = ({
                 )}
                 Continue with Google
               </button>
+
+              {typeof window !== 'undefined' && window.self !== window.top && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 space-y-2">
+                  <p className="text-[11px] text-amber-950 leading-relaxed">
+                    Using AI Studio embedded preview? If Google Sign-In popup closes or fails inside the preview frame, open the app directly in a full browser tab to sign in:
+                  </p>
+                  <a
+                    href={window.location.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-white border border-amber-300 text-xs font-semibold text-amber-950 hover:bg-amber-100/70"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open App in New Tab to Sign In
+                  </a>
+                </div>
+              )}
 
               <p className="text-[11px] text-center text-slate-500">
                 Even before signing in, your edits auto-save on this device every 1 minute.
