@@ -1,0 +1,228 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isVerifiedOwner(userId) {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.uid == userId;
+    }
+
+    function isValidString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    function isValidStringList(arr, maxItems) {
+      return arr is list
+        && arr.size() <= maxItems
+        && (arr.size() == 0 || arr[0] is string);
+    }
+
+    function isValidMapList(arr, maxItems) {
+      return arr is list
+        && arr.size() <= maxItems
+        && (arr.size() == 0 || arr[0] is map);
+    }
+
+    function isValidPersonal(p) {
+      return p is map
+        && p.keys().hasAll([
+          'fullName', 'professionalTitle', 'photoUrl', 'dateOfBirth',
+          'nationality', 'address', 'phone', 'email', 'linkedin', 'website'
+        ])
+        && p.keys().hasOnly([
+          'fullName', 'professionalTitle', 'photoUrl', 'dateOfBirth',
+          'nationality', 'address', 'phone', 'email', 'linkedin', 'website'
+        ])
+        && isValidString(p.fullName, 140)
+        && isValidString(p.professionalTitle, 160)
+        && isValidString(p.photoUrl, 180000)
+        && isValidString(p.dateOfBirth, 40)
+        && isValidString(p.nationality, 120)
+        && isValidString(p.address, 260)
+        && isValidString(p.phone, 60)
+        && isValidString(p.email, 160)
+        && isValidString(p.linkedin, 260)
+        && isValidString(p.website, 260);
+    }
+
+    function isValidSkills(s) {
+      return s is map
+        && s.keys().hasAll(['technical', 'soft', 'industry'])
+        && s.keys().hasOnly(['technical', 'soft', 'industry'])
+        && isValidStringList(s.technical, 60)
+        && isValidStringList(s.soft, 60)
+        && isValidStringList(s.industry, 60);
+    }
+
+    function isValidDrivingLicence(d) {
+      return d is map
+        && d.keys().hasAll(['classes', 'issuingCountry', 'notes'])
+        && d.keys().hasOnly(['classes', 'issuingCountry', 'notes'])
+        && isValidString(d.classes, 160)
+        && isValidString(d.issuingCountry, 120)
+        && isValidString(d.notes, 500);
+    }
+
+    function isValidStyle(st) {
+      return st is map
+        && st.keys().hasAll([
+          'accentColor', 'fontFamily', 'fontSize',
+          'showPhoto', 'sectionOrder', 'hiddenSections'
+        ])
+        && st.keys().hasOnly([
+          'accentColor', 'fontFamily', 'fontSize',
+          'showPhoto', 'sectionOrder', 'hiddenSections'
+        ])
+        && isValidString(st.accentColor, 32)
+        && isValidString(st.fontFamily, 60)
+        && st.fontSize in ['sm', 'md', 'lg']
+        && st.showPhoto is bool
+        && isValidStringList(st.sectionOrder, 20)
+        && isValidStringList(st.hiddenSections, 20);
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'ownerId', 'personal', 'summary', 'careerObjective',
+          'experience', 'education', 'skills', 'languages',
+          'certifications', 'drivingLicence', 'training',
+          'projects', 'volunteer', 'references', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'personal', 'summary', 'careerObjective',
+          'experience', 'education', 'skills', 'languages',
+          'certifications', 'drivingLicence', 'training',
+          'projects', 'volunteer', 'references', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId == request.auth.uid
+        && isValidPersonal(data.personal)
+        && isValidString(data.summary, 5000)
+        && isValidString(data.careerObjective, 5000)
+        && isValidMapList(data.experience, 40)
+        && isValidMapList(data.education, 30)
+        && isValidSkills(data.skills)
+        && isValidMapList(data.languages, 30)
+        && isValidMapList(data.certifications, 40)
+        && isValidDrivingLicence(data.drivingLicence)
+        && isValidMapList(data.training, 40)
+        && isValidMapList(data.projects, 40)
+        && isValidMapList(data.volunteer, 30)
+        && isValidMapList(data.references, 20)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCVDocument(data, cvId) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'name', 'templateId', 'personal',
+          'summary', 'careerObjective', 'useObjectiveInsteadOfSummary',
+          'experience', 'education', 'skills', 'languages',
+          'certifications', 'drivingLicence', 'training',
+          'projects', 'volunteer', 'references', 'style',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'ownerId', 'name', 'templateId', 'personal',
+          'summary', 'careerObjective', 'useObjectiveInsteadOfSummary',
+          'experience', 'education', 'skills', 'languages',
+          'certifications', 'drivingLicence', 'training',
+          'projects', 'volunteer', 'references', 'style',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == cvId
+        && data.ownerId == request.auth.uid
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 140
+        && data.templateId is string && data.templateId.size() >= 1 && data.templateId.size() <= 60
+        && isValidPersonal(data.personal)
+        && isValidString(data.summary, 5000)
+        && isValidString(data.careerObjective, 5000)
+        && data.useObjectiveInsteadOfSummary is bool
+        && isValidMapList(data.experience, 40)
+        && isValidMapList(data.education, 30)
+        && isValidSkills(data.skills)
+        && isValidMapList(data.languages, 30)
+        && isValidMapList(data.certifications, 40)
+        && isValidDrivingLicence(data.drivingLicence)
+        && isValidMapList(data.training, 40)
+        && isValidMapList(data.projects, 40)
+        && isValidMapList(data.volunteer, 30)
+        && isValidMapList(data.references, 20)
+        && isValidStyle(data.style)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Owner-private reusable master profile
+    match /users/{userId}/profile/{docId} {
+      allow get: if isVerifiedOwner(userId) && docId == 'master';
+      allow list: if false;
+      allow create: if isVerifiedOwner(userId)
+        && docId == 'master'
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedOwner(userId)
+        && docId == 'master'
+        && isValidUserProfile(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'personal', 'summary', 'careerObjective',
+          'experience', 'education', 'skills', 'languages',
+          'certifications', 'drivingLicence', 'training',
+          'projects', 'volunteer', 'references', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedOwner(userId) && docId == 'master';
+    }
+
+    // Owner-private CV documents
+    match /users/{userId}/cvs/{cvId} {
+      allow get: if isVerifiedOwner(userId) && isValidId(cvId);
+      allow list: if isVerifiedOwner(userId)
+        && resource.data.ownerId == request.auth.uid;
+      allow create: if isVerifiedOwner(userId)
+        && isValidId(cvId)
+        && isValidCVDocument(incoming(), cvId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedOwner(userId)
+        && isValidId(cvId)
+        && isValidCVDocument(incoming(), cvId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'templateId', 'personal', 'summary', 'careerObjective',
+          'useObjectiveInsteadOfSummary', 'experience', 'education',
+          'skills', 'languages', 'certifications', 'drivingLicence',
+          'training', 'projects', 'volunteer', 'references', 'style', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedOwner(userId) && isValidId(cvId);
+    }
+  }
+}

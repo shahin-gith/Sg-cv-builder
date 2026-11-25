@@ -1,0 +1,106 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Owner-private reusable personal profile used to prefill multiple CVs.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "personal": { "type": "object" },
+        "summary": { "type": "string", "maxLength": 5000 },
+        "careerObjective": { "type": "string", "maxLength": 5000 },
+        "experience": { "type": "array" },
+        "education": { "type": "array" },
+        "skills": { "type": "object" },
+        "languages": { "type": "array" },
+        "certifications": { "type": "array" },
+        "drivingLicence": { "type": "object" },
+        "training": { "type": "array" },
+        "projects": { "type": "array" },
+        "volunteer": { "type": "array" },
+        "references": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "ownerId",
+        "personal",
+        "summary",
+        "careerObjective",
+        "experience",
+        "education",
+        "skills",
+        "languages",
+        "certifications",
+        "drivingLicence",
+        "training",
+        "projects",
+        "volunteer",
+        "references",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CVDocument": {
+      "title": "CVDocument",
+      "description": "Individual customized CV document belonging to a single verified user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "templateId": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "personal": { "type": "object" },
+        "summary": { "type": "string", "maxLength": 5000 },
+        "careerObjective": { "type": "string", "maxLength": 5000 },
+        "useObjectiveInsteadOfSummary": { "type": "boolean" },
+        "experience": { "type": "array" },
+        "education": { "type": "array" },
+        "skills": { "type": "object" },
+        "languages": { "type": "array" },
+        "certifications": { "type": "array" },
+        "drivingLicence": { "type": "object" },
+        "training": { "type": "array" },
+        "projects": { "type": "array" },
+        "volunteer": { "type": "array" },
+        "references": { "type": "array" },
+        "style": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "name",
+        "templateId",
+        "personal",
+        "summary",
+        "careerObjective",
+        "useObjectiveInsteadOfSummary",
+        "experience",
+        "education",
+        "skills",
+        "languages",
+        "certifications",
+        "drivingLicence",
+        "training",
+        "projects",
+        "volunteer",
+        "references",
+        "style",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/profile/{docId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-private master profile document (docId fixed to 'master')."
+    },
+    "/users/{userId}/cvs/{cvId}": {
+      "schema": { "$ref": "#/entities/CVDocument" },
+      "description": "Owner-private CV documents created and edited by the user."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "CareerCraft SG — AI CV Builder",
+  "description": "AI-powered professional CV builder for Singapore, European, Canadian, and international job markets with 13 templates, smart profile prefill, Bengali-to-English AI rewriting, CV scoring, and A4 PDF export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

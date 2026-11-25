@@ -1,0 +1,12 @@
+{
+  "projectId": "sg-cv-maker",
+  "appId": "1:312096850232:web:08d4ea4325e2329df301cd",
+  "apiKey": "AIzaSyDlTRl2lpTHwZPPUXZ4-pKkBl1ELuSUIrY",
+  "authDomain": "sg-cv-maker.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-procvaibuilder-65d82ef9-89fc-4ad8-bd6d-0e5a6a6ff258",
+  "storageBucket": "sg-cv-maker.firebasestorage.app",
+  "messagingSenderId": "312096850232",
+  "measurementId": "",
+  "oAuthClientId": "312096850232-hgg9200jh1uj2icliu7tvl653ekkj65a.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}
