@@ -22,12 +22,20 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { CV_TEMPLATES, getTemplateById, SECTION_LABELS } from '../data/templates';
+import {
+  CV_TEMPLATES,
+  filterTemplates,
+  getTemplateById,
+  SECTION_LABELS,
+  TEMPLATE_CATEGORIES,
+} from '../data/templates';
+import { SINGAPORE_CREDENTIAL_PRESETS } from '../data/singaporeOccupations';
 import {
   CVDocument,
   CVFontFamily,
   CVFontSize,
   RewriteAction,
+  TemplateCategory,
   TemplateId,
 } from '../types/cv';
 import {
@@ -92,12 +100,21 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   const [editorMode, setEditorMode] = useState<'content' | 'design'>('content');
   const [previewZoom, setPreviewZoom] = useState(0.68);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [tplCategory, setTplCategory] = useState<'All' | TemplateCategory>('All');
+  const [tplSearch, setTplSearch] = useState('');
   const [savedToast, setSavedToast] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [newSkillText, setNewSkillText] = useState('');
   const [newSkillCat, setNewSkillCat] = useState<'technical' | 'industry' | 'soft'>(
     'technical'
   );
+
+  const jumpToSection = (sectionId: string) => {
+    setEditorMode('content');
+    window.setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 30);
+  };
 
   const [aiModal, setAiModal] = useState<{
     open: boolean;
@@ -568,15 +585,36 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
               </div>
             </div>
           ) : (
-            <div className="p-5 space-y-7">
+            <div className="p-4 sm:p-5 space-y-5 bg-[#f8fbff]">
+              {/* Quick Section Jump Bar */}
+              <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-white border border-sky-200">
+                {[
+                  ['sec-personal', 'Personal', 'bg-sky-50 text-sky-900 border-sky-200'],
+                  ['sec-summary', 'Summary', 'bg-indigo-50 text-indigo-900 border-indigo-200'],
+                  ['sec-experience', 'Experience', 'bg-emerald-50 text-emerald-900 border-emerald-200'],
+                  ['sec-skills', 'Skills', 'bg-violet-50 text-violet-900 border-violet-200'],
+                  ['sec-education', 'Education', 'bg-amber-50 text-amber-900 border-amber-200'],
+                  ['sec-certs', 'Licence & Certs', 'bg-teal-50 text-teal-900 border-teal-200'],
+                ].map(([targetId, label, tone]) => (
+                  <button
+                    key={targetId}
+                    type="button"
+                    onClick={() => jumpToSection(targetId)}
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold hover:opacity-90 whitespace-nowrap ${tone}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               {/* Personal Info */}
-              <section className="space-y-3">
+              <section id="sec-personal" className="space-y-3 rounded-2xl border border-sky-200 bg-sky-50/60 p-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    Personal Information
+                  <h3 className="text-sm font-bold text-sky-950">
+                    1. Personal Information
                   </h3>
                   {tpl.supportsPhoto && (
-                    <label className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:underline cursor-pointer">
+                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-sky-200 text-xs font-semibold text-blue-700 hover:bg-sky-50 cursor-pointer">
                       <Upload className="w-3.5 h-3.5" />
                       {present.personal.photoUrl ? 'Change Photo' : 'Upload Photo'}
                       <input
@@ -708,11 +746,11 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
               </section>
 
               {/* Summary / Objective */}
-              <section className="space-y-2 pt-4 border-t border-slate-100">
+              <section id="sec-summary" className="space-y-2.5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <h3 className="text-sm font-semibold text-slate-900 whitespace-nowrap">
-                      {present.useObjectiveInsteadOfSummary
+                    <h3 className="text-sm font-bold text-indigo-950 whitespace-nowrap">
+                      2. {present.useObjectiveInsteadOfSummary
                         ? 'Career Objective'
                         : 'Professional Summary'}
                     </h3>
@@ -808,10 +846,10 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
               </section>
 
               {/* Work Experience */}
-              <section className="space-y-3 pt-4 border-t border-slate-100">
+              <section id="sec-experience" className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/55 p-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    Work Experience
+                  <h3 className="text-sm font-bold text-emerald-950">
+                    3. Work Experience
                   </h3>
                   <button
                     type="button"
@@ -1082,8 +1120,8 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
               </section>
 
               {/* Skills */}
-              <section className="space-y-2.5 pt-4 border-t border-slate-100">
-                <h3 className="text-sm font-semibold text-slate-900">Skills</h3>
+              <section id="sec-skills" className="space-y-2.5 rounded-2xl border border-violet-200 bg-violet-50/55 p-4">
+                <h3 className="text-sm font-bold text-violet-950">4. Skills</h3>
                 <div className="flex gap-2">
                   <select
                     value={newSkillCat}
@@ -1156,10 +1194,10 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
               </section>
 
               {/* Education, Driving Licence, Certifications & Additional Sections */}
-              <section className="space-y-3 pt-4 border-t border-slate-100">
+              <section id="sec-education" className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/55 p-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    Education
+                  <h3 className="text-sm font-bold text-amber-950">
+                    5. Education
                   </h3>
                   <button
                     type="button"
@@ -1226,9 +1264,9 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 ))}
               </section>
 
-              <section className="space-y-3 pt-4 border-t border-slate-100">
-                <h3 className="text-sm font-semibold text-slate-900">
-                  Driving Licence
+              <section id="sec-certs" className="space-y-3 rounded-2xl border border-teal-200 bg-teal-50/55 p-4">
+                <h3 className="text-sm font-bold text-teal-950">
+                  6. Driving Licence &amp; Singapore Certificates
                 </h3>
                 <input
                   type="text"
@@ -1242,17 +1280,16 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                       },
                     }))
                   }
-                  placeholder="Driving Licence Classes (e.g., Singapore Class 3)"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
+                  placeholder="Driving Licence Classes (e.g., Singapore Class 3 / Class 4 / Class 5)"
+                  className="w-full rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs"
                 />
                 <FieldHint guideKey="drivingLicence" visible={showFieldGuides} />
-              </section>
 
-              <section className="space-y-3 pt-4 border-t border-slate-100">
+                <div className="pt-2 border-t border-teal-200/70 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    Certifications & Languages
-                  </h3>
+                  <h4 className="text-xs font-bold text-teal-950">
+                    Certifications &amp; Languages
+                  </h4>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -1382,7 +1419,44 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                     </button>
                   </div>
                 ))}
+                <div className="rounded-xl border border-teal-200 bg-white/85 p-3 space-y-2">
+                  <div className="text-[11px] font-bold text-teal-950">
+                    Quick-Add Singapore Certs:
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SINGAPORE_CREDENTIAL_PRESETS.slice(0, 10).map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() =>
+                          updateCV((p) => ({
+                            ...p,
+                            certifications: p.certifications.some(
+                              (c) => c.name.toLowerCase() === preset.name.toLowerCase()
+                            )
+                              ? p.certifications
+                              : [
+                                  ...p.certifications,
+                                  {
+                                    id: generateId('cert'),
+                                    name: preset.name,
+                                    issuer: preset.issuer,
+                                    date: '',
+                                    credentialId: '',
+                                  },
+                                ],
+                          }))
+                        }
+                        className="px-2 py-1 rounded-md border border-teal-200 bg-teal-50/70 text-[10px] font-semibold text-teal-900 hover:bg-teal-100"
+                      >
+                        + {preset.name.slice(0, 28)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <FieldHint guideKey="certifications" visible={showFieldGuides} />
+                </div>
               </section>
             </div>
           )}
@@ -1471,8 +1545,33 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
+            <div className="px-5 pt-4 pb-3 border-b border-slate-100 space-y-2.5 bg-sky-50/50">
+              <input
+                type="search"
+                value={tplSearch}
+                onChange={(e) => setTplSearch(e.target.value)}
+                placeholder="Search template or Singapore occupation (welder, chef, hotel, driver)..."
+                className="w-full rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {TEMPLATE_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setTplCategory(cat)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap ${
+                      tplCategory === cat
+                        ? 'bg-blue-700 text-white'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-sky-50'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="p-5 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {CV_TEMPLATES.map((t) => {
+              {filterTemplates(tplCategory, tplSearch).map((t) => {
                 const active = t.id === present.templateId;
                 return (
                   <button
@@ -1481,16 +1580,16 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                     onClick={() => handleSwitchTemplate(t.id)}
                     className={`text-left p-4 rounded-xl border transition-colors ${
                       active
-                        ? 'border-blue-700 bg-blue-50/50'
-                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                        ? 'border-blue-700 bg-sky-50 ring-2 ring-blue-200'
+                        : 'border-slate-200 hover:border-sky-300 bg-white'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-sm text-slate-900">
+                      <span className="font-bold text-sm text-slate-900">
                         {t.name}
                       </span>
                       {active && (
-                        <span className="text-xs font-semibold text-blue-700">
+                        <span className="text-xs font-bold text-blue-700">
                           Active
                         </span>
                       )}

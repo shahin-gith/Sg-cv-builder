@@ -3,11 +3,12 @@ import { User } from 'firebase/auth';
 import {
   CheckCircle2,
   Cloud,
-  KeyRound,
+  FileText,
   Loader2,
   LogOut,
-  Mail,
+  RefreshCw,
   ShieldCheck,
+  UserCheck,
   X,
 } from 'lucide-react';
 import {
@@ -15,12 +16,6 @@ import {
   signInWithGooglePopup,
   signOutFirebase,
 } from '../firebase';
-import {
-  loginWithEmail,
-  registerWithEmail,
-  resendOtpCode,
-  verifyOtpCode,
-} from '../services/accountClient';
 import { CVDocument, UserProfile } from '../types/cv';
 
 interface AuthOtpModalProps {
@@ -29,7 +24,8 @@ interface AuthOtpModalProps {
   currentProfile: UserProfile;
   currentCVs: CVDocument[];
   firebaseUser: User | null;
-  onAuthenticated: (payload: {
+  onSyncNow?: () => Promise<void>;
+  onAuthenticated?: (payload: {
     token: string;
     email: string;
     cloudProfile?: UserProfile | null;
@@ -40,24 +36,21 @@ interface AuthOtpModalProps {
 export const AuthOtpModal: React.FC<AuthOtpModalProps> = ({
   isOpen,
   onClose,
+  currentProfile,
+  currentCVs,
   firebaseUser,
-  onAuthenticated,
+  onSyncNow,
 }) => {
-  const [mode, setMode] = useState<'register' | 'login'>('register');
-  const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState('');
-  const [previewOtp, setPreviewOtp] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleGoogleSignIn = async () => {
     setError(null);
+    setSyncNotice(null);
     setGoogleLoading(true);
     try {
       await signInWithGooglePopup();
@@ -66,7 +59,7 @@ export const AuthOtpModal: React.FC<AuthOtpModalProps> = ({
       setError(
         err instanceof Error
           ? err.message
-          : 'Google sign-in was cancelled or blocked by popup settings.'
+          : 'Google sign-in was cancelled or blocked by popup settings. Please allow popups and try again.'
       );
     } finally {
       setGoogleLoading(false);
@@ -75,6 +68,7 @@ export const AuthOtpModal: React.FC<AuthOtpModalProps> = ({
 
   const handleGoogleSignOut = async () => {
     setError(null);
+    setSyncNotice(null);
     setGoogleLoading(true);
     try {
       await signOutFirebase();
@@ -85,335 +79,215 @@ export const AuthOtpModal: React.FC<AuthOtpModalProps> = ({
     }
   };
 
-  const handleSubmitCredentials = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSyncNow = async () => {
+    if (!onSyncNow) return;
     setError(null);
-    setStatusMessage(null);
-    setLoading(true);
+    setSyncNotice(null);
+    setSyncing(true);
     try {
-      if (mode === 'register') {
-        const res = await registerWithEmail(email, password);
-        setPreviewOtp(res.previewOtp ?? null);
-        setStatusMessage(
-          res.deliveredViaEmail
-            ? `A 6-digit OTP was sent to ${res.email}.`
-            : 'Enter the 6-digit verification code below to verify your email and save your CVs.'
-        );
-        setStep('otp');
-      } else {
-        const res = await loginWithEmail(email, password, true);
-        if (res.requiresOtp) {
-          setPreviewOtp(res.previewOtp ?? null);
-          setStatusMessage(
-            res.deliveredViaEmail
-              ? `Verification OTP sent to ${res.email}.`
-              : 'Enter the 6-digit OTP code to sign in securely.'
-          );
-          setStep('otp');
-        } else if (res.token && res.user) {
-          onAuthenticated({
-            token: res.token,
-            email: res.user.email,
-            cloudProfile: res.profile ?? null,
-            cloudCVs: res.cvs ?? null,
-          });
-          onClose();
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed.');
+      await onSyncNow();
+      setSyncNotice('Profile & all CVs synced to your Google Account.');
+    } catch {
+      setError('Could not sync right now. Please check your connection.');
     } finally {
-      setLoading(false);
+      setSyncing(false);
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await verifyOtpCode(email, otp);
-      if (res.token && res.user) {
-        onAuthenticated({
-          token: res.token,
-          email: res.user.email,
-        });
-        onClose();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid OTP code.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResend = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await resendOtpCode(email);
-      setPreviewOtp(res.previewOtp ?? null);
-      setStatusMessage('A fresh 6-digit OTP has been issued.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not resend OTP.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const initials = (
+    firebaseUser?.displayName ||
+    firebaseUser?.email ||
+    currentProfile.personal.fullName ||
+    'G'
+  )
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Firebase Cloud Sync and Email OTP Account Verification"
+      aria-label="Google Account Sign In and Cloud Backup"
     >
-      <div className="bg-white border border-slate-200 rounded-xl shadow-xl w-full max-w-md max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+      <div className="bg-white border border-sky-200 rounded-2xl shadow-2xl w-full max-w-md max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-sky-100 bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              {step === 'otp' ? 'Verify Email OTP' : 'Save & Sync CVs to Firebase'}
+            <h2 className="text-base font-bold text-slate-900">
+              {firebaseUser ? 'Your Google Account' : 'Sign in with Google'}
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Sign in to save CVs in Cloud Firestore ({firebaseProjectId}), or use same-device auto-save.
+            <p className="text-xs text-slate-600 mt-0.5">
+              One Google Account holds your Master Profile, CVs &amp; edits ({firebaseProjectId})
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close account dialog"
-            className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+            aria-label="Close Google account dialog"
+            className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-500 hover:bg-white/80"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="p-6 space-y-5">
-          {step === 'credentials' && (
-            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-3">
-              <div className="flex items-start gap-2.5">
-                <Cloud className="w-4 h-4 text-blue-700 mt-0.5 shrink-0" />
-                <div>
-                  <div className="text-xs font-semibold text-slate-900">
-                    Firebase Firestore Cloud Sync ({firebaseProjectId})
-                  </div>
-                  <p className="text-[11px] text-slate-600 mt-0.5">
-                    Sign in with Google to store your CVs and profile in Firestore and edit them anytime from any device.
-                  </p>
-                </div>
-              </div>
-
-              {firebaseUser ? (
-                <div className="flex items-center justify-between gap-2 bg-white border border-emerald-200 rounded-lg px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-emerald-800 truncate">
-                      Connected: {firebaseUser.email || firebaseUser.displayName || 'Google Account'}
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      Auto-syncing CVs to Firestore
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleGoogleSignOut}
-                    disabled={googleLoading}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 shrink-0"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Sign Out
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={googleLoading}
-                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 disabled:opacity-60"
-                >
-                  {googleLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Cloud className="w-4 h-4" />
-                  )}
-                  Continue with Google (Firebase Sync)
-                </button>
-              )}
-            </div>
-          )}
-
-          {step === 'credentials' ? (
-            <>
-              <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                <span className="flex-1 h-px bg-slate-200" />
-                <span>OR USE EMAIL &amp; OTP BACKUP</span>
-                <span className="flex-1 h-px bg-slate-200" />
-              </div>
-              <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('register');
-                    setError(null);
-                  }}
-                  className={`py-2 rounded-md text-xs font-semibold ${
-                    mode === 'register'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600'
-                  }`}
-                >
-                  Create Account (OTP)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('login');
-                    setError(null);
-                  }}
-                  className={`py-2 rounded-md text-xs font-semibold ${
-                    mode === 'login'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600'
-                  }`}
-                >
-                  Sign In (OTP)
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmitCredentials} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Password (minimum 6 characters)
-                  </label>
-                  <div className="relative">
-                    <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="password"
-                      required
-                      minLength={6}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                    />
-                  </div>
-                </div>
-
-                {error && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
-                    {error}
+          {firebaseUser ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 flex items-center gap-3.5">
+                {firebaseUser.photoURL ? (
+                  <img
+                    src={firebaseUser.photoURL}
+                    alt={firebaseUser.displayName || 'Google Profile'}
+                    referrerPolicy="no-referrer"
+                    className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-xs shrink-0"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center shrink-0">
+                    {initials}
                   </div>
                 )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-slate-900 truncate">
+                    {firebaseUser.displayName || 'Google Account Connected'}
+                  </div>
+                  <div className="text-xs text-emerald-800 font-medium truncate">
+                    {firebaseUser.email}
+                  </div>
+                  <div className="text-[11px] text-slate-600 mt-0.5 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>All CVs &amp; Profile auto-saved in Cloud Firestore</span>
+                  </div>
+                </div>
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-sky-900">
+                    <FileText className="w-3.5 h-3.5 text-sky-700" />
+                    Saved CVs
+                  </div>
+                  <div className="text-xl font-bold text-slate-900 mt-1 tabular-nums">
+                    {currentCVs.length}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-900">
+                    <UserCheck className="w-3.5 h-3.5 text-indigo-700" />
+                    Master Profile
+                  </div>
+                  <div className="text-sm font-bold text-slate-900 mt-1.5 truncate">
+                    {currentProfile.personal.fullName || 'Ready'}
+                  </div>
+                </div>
+              </div>
+
+              {syncNotice && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-medium text-emerald-800">
+                  {syncNotice}
+                </div>
+              )}
+
+              {error && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                {onSyncNow && (
+                  <button
+                    type="button"
+                    onClick={handleSyncNow}
+                    disabled={syncing || googleLoading}
+                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 disabled:opacity-60"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                    {syncing ? 'Syncing...' : 'Sync Everything Now'}
+                  </button>
+                )}
                 <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-60"
+                  type="button"
+                  onClick={handleGoogleSignOut}
+                  disabled={googleLoading}
+                  className="inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="w-4 h-4" />
-                  )}
-                  {mode === 'register'
-                    ? 'Send Verification OTP'
-                    : 'Sign In & Send OTP'}
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
                 </button>
-              </form>
-            </>
+              </div>
+            </div>
           ) : (
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              {statusMessage && (
-                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs text-blue-900">
-                  {statusMessage}
-                </div>
-              )}
-
-              {previewOtp && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs text-amber-900 space-y-1">
-                  <div className="font-semibold">
-                    Email Preview OTP Code (Sandbox Mode)
+            <div className="space-y-4">
+              <div className="rounded-xl border border-sky-200 bg-sky-50/75 p-4 space-y-2.5">
+                <div className="flex items-start gap-2.5">
+                  <Cloud className="w-5 h-5 text-blue-700 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <div className="text-sm font-bold text-slate-900">
+                      Your Single Google Account for Everything
+                    </div>
+                    <p className="text-xs text-slate-700 leading-relaxed">
+                      Sign in once with Google. Your Smart Profile, all CV versions, certificates, and edits stay safely stored in Cloud Firestore so you can open and edit them from any phone or computer.
+                    </p>
+                    <p className="text-xs text-sky-900 leading-relaxed font-medium">
+                      Google দিয়ে সাইন ইন করলে আপনার প্রোফাইল ও সব CV স্থায়ীভাবে সেভ থাকবে — যেকোনো মোবাইল বা কম্পিউটার থেকে পরে আবার দেখতে ও এডিট করতে পারবেন।
+                    </p>
                   </div>
-                  <div className="font-mono-tabular text-lg font-bold tracking-widest text-slate-900">
-                    {previewOtp}
-                  </div>
                 </div>
-              )}
+              </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Enter 6-Digit OTP Code for {email}
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="\d{6}"
-                  maxLength={6}
-                  required
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="123456"
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-center font-mono-tabular text-lg tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-1.5 text-xs text-slate-700">
+                <div className="font-semibold text-emerald-950 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                  What stays inside your Google Account:
+                </div>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Your Saved Master Profile &amp; Photo (prefills every new CV)</li>
+                  <li>All CV templates &amp; versions you create or import from PDF</li>
+                  <li>Automatic 1-minute backup + instant Firestore cloud save</li>
+                </ul>
               </div>
 
               {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-700">
                   {error}
                 </div>
               )}
 
               <button
-                type="submit"
-                disabled={loading || otp.length !== 6}
-                className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50"
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={googleLoading}
+                className="w-full inline-flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 shadow-xs disabled:opacity-60"
               >
-                {loading ? (
+                {googleLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <CheckCircle2 className="w-4 h-4" />
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="#FFFFFF"
+                      d="M21.8 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.5c-.2 1.2-.9 2.3-2 3v2.5h3.2c1.9-1.7 3.1-4.3 3.1-7.3z"
+                    />
+                    <path
+                      fill="#E2E8F0"
+                      d="M12 22c2.7 0 5-.9 6.7-2.4l-3.2-2.5c-.9.6-2 .9-3.5.9-2.7 0-4.9-1.8-5.7-4.3H3v2.6C4.7 19.7 8.1 22 12 22z"
+                    />
+                    <path
+                      fill="#CBD5E1"
+                      d="M6.3 13.7c-.2-.6-.3-1.2-.3-1.7s.1-1.1.3-1.7V7.7H3C2.4 9 2 10.5 2 12s.4 3 1 4.3l3.3-2.6z"
+                    />
+                    <path
+                      fill="#FFFFFF"
+                      d="M12 6c1.5 0 2.8.5 3.8 1.5l2.9-2.9C17 3 14.7 2 12 2 8.1 2 4.7 4.3 3 7.7l3.3 2.6C7.1 7.8 9.3 6 12 6z"
+                    />
+                  </svg>
                 )}
-                Verify OTP & Save CVs
+                Continue with Google
               </button>
 
-              <div className="flex items-center justify-between text-xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep('credentials');
-                    setOtp('');
-                    setError(null);
-                  }}
-                  className="text-slate-600 hover:underline"
-                >
-                  ← Change Email
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResend}
-                  disabled={loading}
-                  className="font-medium text-blue-700 hover:underline"
-                >
-                  Resend OTP
-                </button>
-              </div>
-            </form>
+              <p className="text-[11px] text-center text-slate-500">
+                Even before signing in, your edits auto-save on this device every 1 minute.
+              </p>
+            </div>
           )}
         </div>
       </div>

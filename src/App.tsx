@@ -22,7 +22,6 @@ import { DashboardView } from './components/DashboardView';
 import { ImportPdfModal } from './components/ImportPdfModal';
 import { ProfileView } from './components/ProfileView';
 import { TemplateGalleryView } from './components/TemplateGalleryView';
-import { saveAccountData } from './services/accountClient';
 import {
   bootstrapUserCloudData,
   deleteCVFromFirestore,
@@ -88,16 +87,10 @@ export function App() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [importPdfOpen, setImportPdfOpen] = useState(false);
 
-  // Firebase Auth & Firestore state
+  // Unified Google Sign-In & Cloud Firestore account state
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [firebaseAuthReady, setFirebaseAuthReady] = useState(false);
   const [cloudNotice, setCloudNotice] = useState<string | null>(null);
-
-  // Security: Keep custom Bearer session token in React memory only (never localStorage)
-  const [authSession, setAuthSession] = useState<{
-    token: string;
-    email: string;
-  } | null>(null);
 
   const [secondsLeft, setSecondsLeft] = useState(60);
   const [lastSavedText, setLastSavedText] = useState(() =>
@@ -107,14 +100,12 @@ export function App() {
   const pendingSaveTimersRef = useRef<Map<string, number>>(new Map());
   const bootstrappedUidRef = useRef<string | null>(null);
 
-  // Refs for clean 60-second periodic auto-save without resetting interval on every keystroke
   const latestStateRef = useRef({
     profile,
     cvs,
     view,
     activeCvId,
     showFieldGuides,
-    authSession,
     firebaseUser,
   });
   latestStateRef.current = {
@@ -123,11 +114,10 @@ export function App() {
     view,
     activeCvId,
     showFieldGuides,
-    authSession,
     firebaseUser,
   };
 
-  // Monitor Firebase Auth state
+  // Monitor Google Sign-In state via Firebase Auth
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
@@ -139,7 +129,7 @@ export function App() {
     return () => unsub();
   }, []);
 
-  // Bootstrap and subscribe to Cloud Firestore when Firebase user is authenticated
+  // Bootstrap and subscribe to Cloud Firestore when signed in with Google
   useEffect(() => {
     if (!firebaseAuthReady || !firebaseUser) return;
 
@@ -177,7 +167,6 @@ export function App() {
                 }
                 return cloudItem;
               });
-              // Preserve any brand-new local CV still mid-debounce before its first Firestore write completes
               for (const localItem of prev) {
                 if (
                   activeTimers.has(localItem.id) &&
@@ -193,7 +182,7 @@ export function App() {
           (err) => {
             setCloudNotice(
               err.message.includes('Missing or insufficient permissions')
-                ? 'Firebase Firestore permission check failed. Please verify your account email or security rules.'
+                ? 'Google Account permission check failed. Please sign out and sign in with Google again.'
                 : 'Cloud sync is temporarily offline; changes remain safely saved on this device.'
             );
           }
@@ -202,8 +191,8 @@ export function App() {
         if (!cancelled) {
           setCloudNotice(
             err instanceof Error
-              ? 'Firestore sync paused; device auto-save remains active.'
-              : 'Firestore sync paused.'
+              ? 'Cloud sync paused; device auto-save remains active.'
+              : 'Cloud sync paused.'
           );
         }
       }
@@ -217,12 +206,10 @@ export function App() {
     };
   }, [firebaseAuthReady, firebaseUser]);
 
-  // Persist CV edits immediately to localStorage + IndexedDB
   useEffect(() => {
     saveCVs(cvs);
   }, [cvs]);
 
-  // Persist workspace route / active CV / guide preference on this device
   useEffect(() => {
     saveWorkspaceState({
       activeView: view,
@@ -232,19 +219,16 @@ export function App() {
     });
   }, [view, activeCvId, showFieldGuides]);
 
-  const persistCVToCloud = useCallback(
-    async (cv: CVDocument) => {
-      const uid = latestStateRef.current.firebaseUser?.uid;
-      if (!uid) return;
-      try {
-        await saveCVToFirestore(uid, cv);
-        setLastSavedText(formatClockTime(new Date()));
-      } catch {
-        setCloudNotice('Could not sync latest CV edit to Firestore; local copy saved.');
-      }
-    },
-    []
-  );
+  const persistCVToCloud = useCallback(async (cv: CVDocument) => {
+    const uid = latestStateRef.current.firebaseUser?.uid;
+    if (!uid) return;
+    try {
+      await saveCVToFirestore(uid, cv);
+      setLastSavedText(formatClockTime(new Date()));
+    } catch {
+      setCloudNotice('Could not sync latest CV edit to Google Cloud; local copy saved.');
+    }
+  }, []);
 
   const scheduleCloudCVSave = useCallback(
     (cv: CVDocument) => {
@@ -261,6 +245,16 @@ export function App() {
     },
     [persistCVToCloud]
   );
+
+  const syncAllToCloud = useCallback(async () => {
+    const current = latestStateRef.current;
+    if (!current.firebaseUser?.uid) return;
+    await saveUserProfileToFirestore(current.firebaseUser.uid, current.profile);
+    for (const cvItem of current.cvs) {
+      await saveCVToFirestore(current.firebaseUser.uid, cvItem);
+    }
+    setLastSavedText(formatClockTime(new Date()));
+  }, []);
 
   const runFullAutoSave = useCallback(async () => {
     const current = latestStateRef.current;
@@ -282,15 +276,6 @@ export function App() {
             await saveCVToFirestore(current.firebaseUser.uid, active);
           }
         }
-      } catch {
-        // Keep local auto-save intact even if cloud sync fails momentarily
-      }
-    } else if (current.authSession?.token) {
-      try {
-        await saveAccountData(current.authSession.token, {
-          profile: current.profile,
-          cvs: current.cvs,
-        });
       } catch {
         // Keep local auto-save intact even if cloud sync fails momentarily
       }
@@ -321,12 +306,8 @@ export function App() {
     setLastSavedText(formatClockTime(new Date()));
     if (firebaseUser?.uid) {
       void saveUserProfileToFirestore(firebaseUser.uid, saved).catch(() => {
-        setCloudNotice('Could not sync profile to Firestore; saved on device.');
+        setCloudNotice('Could not sync profile to Google Cloud; saved on device.');
       });
-    } else if (authSession?.token) {
-      void saveAccountData(authSession.token, { profile: saved, cvs }).catch(
-        () => {}
-      );
     }
   };
 
@@ -386,7 +367,7 @@ export function App() {
     }
     if (firebaseUser?.uid) {
       void deleteCVFromFirestore(firebaseUser.uid, id).catch(() => {
-        setCloudNotice('Could not delete CV from Firestore right now.');
+        setCloudNotice('Could not delete CV from Google Cloud right now.');
       });
     }
   };
@@ -411,30 +392,6 @@ export function App() {
     }
   };
 
-  const handleAuthenticated = async (payload: {
-    token: string;
-    email: string;
-    cloudProfile?: UserProfile | null;
-    cloudCVs?: CVDocument[] | null;
-  }) => {
-    setAuthSession({ token: payload.token, email: payload.email });
-
-    if (payload.cloudProfile && payload.cloudCVs && payload.cloudCVs.length > 0) {
-      const savedProfile = saveProfile(payload.cloudProfile);
-      setProfile(savedProfile);
-      const cloudIds = new Set(payload.cloudCVs.map((c) => c.id));
-      const mergedCVs = [
-        ...payload.cloudCVs,
-        ...cvs.filter((c) => !cloudIds.has(c.id)),
-      ];
-      setCvs(mergedCVs);
-      saveCVs(mergedCVs);
-    } else {
-      await saveAccountData(payload.token, { profile, cvs }).catch(() => {});
-    }
-    setLastSavedText(formatClockTime(new Date()));
-  };
-
   const handleImportedPdfCV = (imported: CVDocument) => {
     setCvs((prev) => [imported, ...prev]);
     setActiveCvId(imported.id);
@@ -442,14 +399,11 @@ export function App() {
     void persistCVToCloud(imported);
   };
 
-  const isCloudConnected = Boolean(firebaseUser || authSession);
-  const connectedEmail = firebaseUser?.email || authSession?.email || null;
-
   const activeCV = cvs.find((c) => c.id === activeCvId) ?? null;
 
   if (view === 'editor' && activeCV) {
     return (
-      <div className="min-h-screen bg-slate-100">
+      <div className="min-h-screen bg-[#f3f7ff]">
         <CVEditorView
           key={activeCV.id}
           cv={activeCV}
@@ -469,32 +423,69 @@ export function App() {
     label: string;
     shortLabel: string;
     icon: typeof LayoutDashboard;
+    activeClass: string;
   }> = [
-    { id: 'dashboard', label: 'Dashboard', shortLabel: 'Home', icon: LayoutDashboard },
-    { id: 'cvs', label: 'My CVs', shortLabel: 'My CVs', icon: FileText },
-    { id: 'templates', label: 'Templates', shortLabel: 'Templates', icon: LayoutTemplate },
-    { id: 'profile', label: 'Saved Profile', shortLabel: 'Profile', icon: UserCheck },
-    { id: 'ai-assistant', label: 'AI Writing', shortLabel: 'AI Write', icon: Sparkles },
-    { id: 'review', label: 'CV Review', shortLabel: 'Review', icon: ShieldCheck },
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      shortLabel: 'Home',
+      icon: LayoutDashboard,
+      activeClass: 'bg-sky-100 text-sky-900 border border-sky-200',
+    },
+    {
+      id: 'cvs',
+      label: 'My CVs',
+      shortLabel: 'My CVs',
+      icon: FileText,
+      activeClass: 'bg-indigo-100 text-indigo-900 border border-indigo-200',
+    },
+    {
+      id: 'templates',
+      label: 'Templates (23)',
+      shortLabel: 'Templates',
+      icon: LayoutTemplate,
+      activeClass: 'bg-amber-100 text-amber-900 border border-amber-200',
+    },
+    {
+      id: 'profile',
+      label: 'Saved Profile',
+      shortLabel: 'Profile',
+      icon: UserCheck,
+      activeClass: 'bg-emerald-100 text-emerald-900 border border-emerald-200',
+    },
+    {
+      id: 'ai-assistant',
+      label: 'AI Writing',
+      shortLabel: 'AI Write',
+      icon: Sparkles,
+      activeClass: 'bg-violet-100 text-violet-900 border border-violet-200',
+    },
+    {
+      id: 'review',
+      label: 'CV Review',
+      shortLabel: 'Review',
+      icon: ShieldCheck,
+      activeClass: 'bg-teal-100 text-teal-900 border border-teal-200',
+    },
   ];
 
   const mobileTabs = navItems;
 
   return (
-    <div className="min-h-screen flex bg-slate-50 text-slate-900">
+    <div className="min-h-screen flex bg-[#f3f7ff] text-slate-900">
       {/* Desktop Sidebar */}
-      <aside className="no-print hidden lg:flex lg:flex-col lg:w-60 lg:fixed lg:inset-y-0 bg-white border-r border-slate-200">
-        <div className="h-16 px-5 flex items-center border-b border-slate-200">
+      <aside className="no-print hidden lg:flex lg:flex-col lg:w-60 lg:fixed lg:inset-y-0 bg-white border-r border-sky-100">
+        <div className="h-16 px-5 flex items-center border-b border-sky-100 bg-gradient-to-r from-sky-50 to-white">
           <button
             type="button"
             onClick={() => setView('dashboard')}
-            className="text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap"
+            className="text-lg font-extrabold tracking-tight text-blue-900 whitespace-nowrap"
           >
             CareerCraft SG
           </button>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1" aria-label="Main navigation">
+        <nav className="flex-1 p-3 space-y-1.5" aria-label="Main navigation">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = view === item.id;
@@ -503,10 +494,10 @@ export function App() {
                 key={item.id}
                 type="button"
                 onClick={() => setView(item.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ${
                   active
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    ? item.activeClass
+                    : 'text-slate-600 hover:bg-sky-50/70 hover:text-slate-900'
                 }`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
@@ -516,35 +507,50 @@ export function App() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-200 space-y-2.5">
+        <div className="p-4 border-t border-sky-100 bg-sky-50/40 space-y-2.5">
           <div>
-            <div className="text-xs font-medium text-slate-900 truncate">
-              {profile.personal.fullName || 'Worker Profile'}
+            <div className="text-xs font-bold text-slate-900 truncate">
+              {firebaseUser?.displayName || profile.personal.fullName || 'Worker Profile'}
             </div>
             <div className="text-[11px] text-slate-500 truncate mt-0.5">
               {autoSaveLabel}
             </div>
           </div>
 
-          {isCloudConnected && connectedEmail ? (
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <div className="min-w-0">
-                <span className="block text-[11px] font-medium text-emerald-700 truncate">
-                  {connectedEmail}
-                </span>
-                <span className="block text-[10px] text-slate-500 truncate">
-                  {firebaseUser ? `Firestore (${firebaseProjectId})` : 'Email OTP Synced'}
-                </span>
-              </div>
+          {firebaseUser ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-2.5 flex items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  if (firebaseUser) void signOutFirebase();
-                  setAuthSession(null);
-                }}
-                aria-label="Sign out"
+                onClick={() => setAuthModalOpen(true)}
+                className="flex items-center gap-2 min-w-0 text-left"
+              >
+                {firebaseUser.photoURL ? (
+                  <img
+                    src={firebaseUser.photoURL}
+                    alt={firebaseUser.displayName || 'Google Account'}
+                    referrerPolicy="no-referrer"
+                    className="w-7 h-7 rounded-full object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-emerald-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                    {(firebaseUser.email || 'G').slice(0, 1).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <span className="block text-[11px] font-bold text-emerald-900 truncate">
+                    {firebaseUser.email}
+                  </span>
+                  <span className="block text-[10px] text-emerald-700 truncate">
+                    Google Cloud ({firebaseProjectId})
+                  </span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => void signOutFirebase()}
+                aria-label="Sign out of Google"
                 title="Sign out"
-                className="p-1.5 rounded border border-slate-200 text-slate-500 hover:text-slate-900"
+                className="p-1.5 rounded-lg border border-emerald-200 bg-white text-slate-600 hover:text-slate-900 shrink-0"
               >
                 <LogOut className="w-3.5 h-3.5" />
               </button>
@@ -553,10 +559,10 @@ export function App() {
             <button
               type="button"
               onClick={() => setAuthModalOpen(true)}
-              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-sky-300 bg-white text-xs font-bold text-blue-800 hover:bg-sky-50 whitespace-nowrap"
             >
               <Cloud className="w-3.5 h-3.5" />
-              Firebase Cloud Sync
+              Sign in with Google
             </button>
           )}
         </div>
@@ -565,12 +571,12 @@ export function App() {
       {/* Main Content Area */}
       <div className="flex-1 lg:pl-60 flex flex-col min-w-0">
         {/* Top Bar (compact single-line header) */}
-        <header className="no-print sticky top-0 z-30 h-13 lg:h-16 bg-white/95 backdrop-blur-xs border-b border-slate-200 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
+        <header className="no-print sticky top-0 z-30 h-13 lg:h-16 bg-white/95 backdrop-blur-xs border-b border-sky-100 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="lg:hidden font-bold text-base text-slate-900 whitespace-nowrap">
+            <span className="lg:hidden font-extrabold text-base text-blue-900 whitespace-nowrap">
               CareerCraft SG
             </span>
-            <span className="hidden lg:inline text-sm font-medium text-slate-500 whitespace-nowrap">
+            <span className="hidden lg:inline text-sm font-semibold text-slate-700 whitespace-nowrap">
               {navItems.find((n) => n.id === view)?.label ?? 'Workspace'}
             </span>
             <span className="hidden xl:inline text-xs font-mono-tabular text-slate-400 whitespace-nowrap">
@@ -582,34 +588,34 @@ export function App() {
             <button
               type="button"
               onClick={() => setImportPdfOpen(true)}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs sm:text-sm font-medium hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-sky-200 bg-sky-50/70 text-slate-800 text-xs sm:text-sm font-semibold hover:bg-sky-100 transition-colors whitespace-nowrap shrink-0"
             >
-              <FileUp className="w-4 h-4" />
+              <FileUp className="w-4 h-4 text-blue-700" />
               Upload PDF
             </button>
 
             <button
               type="button"
               onClick={() => setAuthModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs sm:text-sm font-medium hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                firebaseUser
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+                  : 'border-sky-200 bg-white text-blue-800 hover:bg-sky-50'
+              }`}
             >
               <Cloud className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">
-                {firebaseUser
-                  ? 'Firestore Synced'
-                  : authSession
-                  ? 'Synced'
-                  : 'Firebase Sync'}
+                {firebaseUser ? 'Google Account Synced' : 'Sign in with Google'}
               </span>
               <span className="sm:hidden">
-                {isCloudConnected ? 'Synced' : 'Sync'}
+                {firebaseUser ? 'Google' : 'Sign In'}
               </span>
             </button>
 
             <button
               type="button"
               onClick={() => setCreateModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-lg bg-blue-700 text-white text-xs sm:text-sm font-medium hover:bg-blue-800 transition-colors whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl bg-blue-700 text-white text-xs sm:text-sm font-semibold hover:bg-blue-800 transition-colors whitespace-nowrap shrink-0"
             >
               <FilePlus2 className="w-4 h-4" />
               Create CV
@@ -619,12 +625,12 @@ export function App() {
 
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 pb-24 lg:pb-10 max-w-7xl w-full mx-auto">
           {cloudNotice && (
-            <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
               <span>{cloudNotice}</span>
               <button
                 type="button"
                 onClick={() => setCloudNotice(null)}
-                className="font-medium underline shrink-0"
+                className="font-semibold underline shrink-0"
               >
                 Dismiss
               </button>
@@ -635,6 +641,8 @@ export function App() {
             <DashboardView
               cvs={cvs}
               profile={profile}
+              firebaseUser={firebaseUser}
+              onOpenAuthModal={() => setAuthModalOpen(true)}
               onNavigate={(v) => setView(v)}
               onCreateNewCV={() => setCreateModalOpen(true)}
               onOpenImportPdf={() => setImportPdfOpen(true)}
@@ -649,6 +657,8 @@ export function App() {
             <DashboardView
               cvs={cvs}
               profile={profile}
+              firebaseUser={firebaseUser}
+              onOpenAuthModal={() => setAuthModalOpen(true)}
               onNavigate={(v) => setView(v)}
               onCreateNewCV={() => setCreateModalOpen(true)}
               onOpenImportPdf={() => setImportPdfOpen(true)}
@@ -697,7 +707,7 @@ export function App() {
 
       {/* Mobile Bottom Navigation Bar (compact 56px, total sticky <= 13% viewport height) */}
       <nav
-        className="no-print lg:hidden fixed bottom-0 inset-x-0 z-30 h-14 bg-white/95 backdrop-blur-xs border-t border-slate-200 grid grid-cols-6 items-center"
+        className="no-print lg:hidden fixed bottom-0 inset-x-0 z-30 h-14 bg-white/95 backdrop-blur-xs border-t border-sky-100 grid grid-cols-6 items-center"
         aria-label="Mobile navigation"
       >
         {mobileTabs.map((item) => {
@@ -708,8 +718,8 @@ export function App() {
               key={item.id}
               type="button"
               onClick={() => setView(item.id)}
-              className={`h-full flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium ${
-                active ? 'text-blue-700' : 'text-slate-500'
+              className={`h-full flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold ${
+                active ? 'text-blue-700 bg-sky-50/70' : 'text-slate-500'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -732,7 +742,7 @@ export function App() {
         currentProfile={profile}
         currentCVs={cvs}
         firebaseUser={firebaseUser}
-        onAuthenticated={handleAuthenticated}
+        onSyncNow={syncAllToCloud}
       />
 
       <ImportPdfModal

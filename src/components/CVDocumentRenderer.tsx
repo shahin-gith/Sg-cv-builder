@@ -25,14 +25,28 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
   const isEuropean = cv.templateId === 'european-cv';
   const isClassic = cv.templateId === 'classic-professional';
   const isMinimal = cv.templateId === 'minimalist';
-  const isModernSidebar = cv.templateId === 'modern-professional';
-  const isOfficeRightRail = cv.templateId === 'office-admin';
+  const isModernSidebar =
+    cv.templateId === 'modern-professional' ||
+    cv.templateId === 'hotel-hospitality' ||
+    cv.templateId === 'healthcare-nursing';
+  const isOfficeRightRail =
+    cv.templateId === 'office-admin' ||
+    cv.templateId === 'retail-customer-service';
   const isHeaderBand =
     cv.templateId === 'executive-cv' ||
     cv.templateId === 'construction-worker' ||
-    cv.templateId === 'driver-cv';
-  const isTechGrid = cv.templateId === 'technician-cv';
-  const isSkilled = cv.templateId === 'skilled-worker';
+    cv.templateId === 'driver-cv' ||
+    cv.templateId === 'marine-shipyard' ||
+    cv.templateId === 'heavy-driver-logistics' ||
+    cv.templateId === 'security-safety' ||
+    cv.templateId === 'restaurant-fnb';
+  const isTechGrid =
+    cv.templateId === 'technician-cv' ||
+    cv.templateId === 'process-oil-gas' ||
+    cv.templateId === 'it-digital-tech';
+  const isSkilled =
+    cv.templateId === 'skilled-worker' ||
+    cv.templateId === 'facilities-cleaning-landscape';
 
   const fontMap: Record<string, string> = {
     'Plus Jakarta Sans': "'Plus Jakarta Sans', sans-serif",
@@ -700,17 +714,55 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
             </header>
           )}
 
-          {/* SKILLED WORKER / TECH HIGHLIGHT STRIP */}
-          {(isSkilled || isTechGrid) && cv.certifications.length > 0 && (
-            <div className="mx-9 mt-4 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-md">
-              <span className="font-bold uppercase tracking-wide mr-2" style={{ color: accent, fontSize: `${baseSizePx - 1}px` }}>
-                Verified Credentials:
-              </span>
-              <span className="text-slate-700" style={{ fontSize: `${baseSizePx - 0.5}px` }}>
-                {cv.certifications.map((c) => c.name).join(' · ')}
-              </span>
-            </div>
-          )}
+          {/* SINGAPORE SECTOR CREDENTIAL HIGHLIGHT STRIP */}
+          {(isSkilled ||
+            isTechGrid ||
+            cv.templateId === 'marine-shipyard' ||
+            cv.templateId === 'construction-worker' ||
+            cv.templateId === 'heavy-driver-logistics' ||
+            cv.templateId === 'driver-cv' ||
+            cv.templateId === 'restaurant-fnb' ||
+            cv.templateId === 'security-safety') &&
+            (cv.certifications.length > 0 || Boolean(cv.drivingLicence.classes.trim())) && (
+              <div className="mx-9 mt-4 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-md space-y-1">
+                {(cv.templateId === 'heavy-driver-logistics' || cv.templateId === 'driver-cv') &&
+                  cv.drivingLicence.classes.trim() && (
+                    <div>
+                      <span
+                        className="font-bold uppercase tracking-wide mr-2"
+                        style={{ color: accent, fontSize: `${baseSizePx - 1}px` }}
+                      >
+                        Driving Licence:
+                      </span>
+                      <span className="text-slate-800 font-medium" style={{ fontSize: `${baseSizePx - 0.5}px` }}>
+                        {cv.drivingLicence.classes}
+                        {cv.drivingLicence.issuingCountry ? ` (${cv.drivingLicence.issuingCountry})` : ''}
+                      </span>
+                    </div>
+                  )}
+                {cv.certifications.length > 0 && (
+                  <div>
+                    <span
+                      className="font-bold uppercase tracking-wide mr-2"
+                      style={{ color: accent, fontSize: `${baseSizePx - 1}px` }}
+                    >
+                      {cv.templateId === 'marine-shipyard'
+                        ? 'Marine & Shipyard Tickets:'
+                        : cv.templateId === 'restaurant-fnb'
+                        ? 'SFA Food Hygiene & Culinary:'
+                        : cv.templateId === 'security-safety'
+                        ? 'PLRD & WSH Credentials:'
+                        : cv.templateId === 'process-oil-gas'
+                        ? 'Process & Plant Safety:'
+                        : 'Verified Credentials:'}
+                    </span>
+                    <span className="text-slate-700" style={{ fontSize: `${baseSizePx - 0.5}px` }}>
+                      {cv.certifications.map((c) => c.name).filter(Boolean).join(' · ')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
           {/* MAIN CONTENT BODY */}
           <div className="px-9 py-6">

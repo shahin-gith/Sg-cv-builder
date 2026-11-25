@@ -1,7 +1,11 @@
 export type TemplateCategory =
-  | 'Corporate & Executive'
-  | 'International & European'
-  | 'Skilled Trades & Operations';
+  | 'Construction & Engineering'
+  | 'Marine, Shipyard & Process'
+  | 'Driving, Port & Logistics'
+  | 'Hotel, Restaurant & F&B'
+  | 'Corporate, Office & Tech'
+  | 'Healthcare, Security & Services'
+  | 'International & European';
 
 export type TemplateId =
   | 'modern-professional'
@@ -16,7 +20,17 @@ export type TemplateId =
   | 'driver-cv'
   | 'construction-worker'
   | 'technician-cv'
-  | 'office-admin';
+  | 'office-admin'
+  | 'marine-shipyard'
+  | 'hotel-hospitality'
+  | 'restaurant-fnb'
+  | 'heavy-driver-logistics'
+  | 'process-oil-gas'
+  | 'healthcare-nursing'
+  | 'security-safety'
+  | 'it-digital-tech'
+  | 'retail-customer-service'
+  | 'facilities-cleaning-landscape';
 
 export type CVFontFamily =
   | 'Plus Jakarta Sans'
@@ -195,6 +209,8 @@ export interface TemplateDefinition {
   recommendedSectionsOrder: CVSectionKey[];
   layoutTag: string;
   disclaimer?: string;
+  occupations?: string[];
+  sectorTint?: 'sky' | 'amber' | 'teal' | 'rose' | 'indigo' | 'emerald' | 'slate';
 }
 
 export type WritingStyle =

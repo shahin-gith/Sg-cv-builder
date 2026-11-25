@@ -132,3 +132,26 @@ test('pdfMetadata encodes and extracts CVDocument cleanly from raw PDF bytes', (
   assert.equal(extracted.experience.length, SAMPLE_PROFILE.experience.length);
 });
 
+test('Singapore template library includes construction, marine, driving, hotel, and restaurant roles', async () => {
+  const { CV_TEMPLATES, filterTemplates } = await import('../data/templates');
+  assert.ok(CV_TEMPLATES.length >= 23);
+
+  const ids = new Set(CV_TEMPLATES.map((t) => t.id));
+  for (const requiredId of [
+    'construction-worker',
+    'marine-shipyard',
+    'driver-cv',
+    'heavy-driver-logistics',
+    'hotel-hospitality',
+    'restaurant-fnb',
+  ]) {
+    assert.ok(ids.has(requiredId as never), `Missing template ${requiredId}`);
+  }
+
+  assert.ok(filterTemplates('All', 'welder').some((t) => t.id === 'marine-shipyard'));
+  assert.ok(filterTemplates('All', 'chef').some((t) => t.id === 'restaurant-fnb'));
+  assert.ok(filterTemplates('All', 'prime mover').some((t) => t.id === 'heavy-driver-logistics'));
+  assert.ok(filterTemplates('All', 'housekeeping').some((t) => t.id === 'hotel-hospitality'));
+});
+
+

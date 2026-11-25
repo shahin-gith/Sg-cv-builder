@@ -35,16 +35,16 @@ export function getFirebaseStatusSummary(): {
   if (isFirebaseConfigured()) {
     return {
       configured: true,
-      providerLabel: `Firebase Firestore Connected (${firebaseConfig.projectId})`,
+      providerLabel: `Google Account + Cloud Firestore (${firebaseConfig.projectId})`,
       details:
-        'Sign in with Google to save & edit your CVs in Cloud Firestore across devices, or keep working with same-device auto-save.',
+        'Sign in with Google to store your Master Profile and all CVs in your Google Account across every device, with 1-minute device auto-save always active.',
     };
   }
   return {
     configured: false,
-    providerLabel: 'Same-Device Auto-Save + Optional Email OTP Account',
+    providerLabel: 'Same-Device Auto-Save Active',
     details:
-      'All inputs stay saved automatically on this device without an account, or verify Email + OTP to save to your private account.',
+      'All inputs stay saved automatically on this device without an account.',
   };
 }
 

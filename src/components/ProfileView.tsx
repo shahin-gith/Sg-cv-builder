@@ -11,6 +11,10 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import {
+  SINGAPORE_CREDENTIAL_PRESETS,
+  SINGAPORE_SECTOR_QUICK_SKILLS,
+} from '../data/singaporeOccupations';
 import { RewriteAction, UserProfile } from '../types/cv';
 import { generateId } from '../utils/cvLogic';
 import {
@@ -142,24 +146,67 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }));
   };
 
-  const tabs: Array<{ id: ProfileTab; label: string }> = [
-    { id: 'personal', label: 'Personal Info' },
-    { id: 'summary', label: 'Summary & Objective' },
-    { id: 'experience', label: `Work Experience (${draft.experience.length})` },
-    { id: 'education', label: `Education (${draft.education.length})` },
-    { id: 'skills', label: 'Skills' },
-    { id: 'additional', label: 'Certifications, Licence & More' },
+  const [presetSector, setPresetSector] = useState<string>('Construction');
+
+  const tabs: Array<{
+    id: ProfileTab;
+    label: string;
+    activeClass: string;
+  }> = [
+    {
+      id: 'personal',
+      label: '1. Personal Info',
+      activeClass: 'bg-sky-100 text-sky-900 border border-sky-300 shadow-xs',
+    },
+    {
+      id: 'summary',
+      label: '2. Summary & Objective',
+      activeClass: 'bg-indigo-100 text-indigo-900 border border-indigo-300 shadow-xs',
+    },
+    {
+      id: 'experience',
+      label: `3. Work Experience (${draft.experience.length})`,
+      activeClass: 'bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-xs',
+    },
+    {
+      id: 'education',
+      label: `4. Education (${draft.education.length})`,
+      activeClass: 'bg-amber-100 text-amber-900 border border-amber-300 shadow-xs',
+    },
+    {
+      id: 'skills',
+      label: '5. Skills',
+      activeClass: 'bg-violet-100 text-violet-900 border border-violet-300 shadow-xs',
+    },
+    {
+      id: 'additional',
+      label: '6. Licences & Certs',
+      activeClass: 'bg-teal-100 text-teal-900 border border-teal-300 shadow-xs',
+    },
   ];
+
+  const tabOrder: ProfileTab[] = ['personal', 'summary', 'experience', 'education', 'skills', 'additional'];
+  const currentTabIdx = tabOrder.indexOf(activeTab);
+  const nextTab = currentTabIdx >= 0 && currentTabIdx < tabOrder.length - 1 ? tabOrder[currentTabIdx + 1] : null;
+
+  const tabPanelBg: Record<ProfileTab, string> = {
+    personal: 'border-sky-200 bg-sky-50/45',
+    summary: 'border-indigo-200 bg-indigo-50/45',
+    experience: 'border-emerald-200 bg-emerald-50/45',
+    education: 'border-amber-200 bg-amber-50/45',
+    skills: 'border-violet-200 bg-violet-50/45',
+    additional: 'border-teal-200 bg-teal-50/45',
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200">
+      <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Smart Profile & Prefill Master
+            Smart Profile &amp; Prefill Master
           </h1>
-          <p className="text-sm text-slate-600 mt-1">
-            Save your personal career details once. Every step auto-saves on this device and updates every 1 minute.
+          <p className="text-sm text-slate-700 mt-1">
+            একবার প্রোফাইল পূরণ করুন — প্রতিবার নতুন CV তৈরি করলে সব তথ্য অটোমেটিক বসে যাবে। প্রতি ১ মিনিটে অটো-সেভ হয়।
           </p>
         </div>
 
@@ -167,9 +214,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <button
             type="button"
             onClick={onToggleFieldGuides}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-sky-200 bg-white text-xs font-semibold text-slate-800 hover:bg-sky-50 whitespace-nowrap"
           >
-            <BookOpen className="w-3.5 h-3.5" />
+            <BookOpen className="w-3.5 h-3.5 text-blue-700" />
             Field Guide: {showFieldGuides ? 'On' : 'Off'}
           </button>
           <button
@@ -178,7 +225,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               onResetDemo();
               setTimeout(() => window.location.reload(), 100);
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Restore Sample
@@ -186,7 +233,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <button
             type="button"
             onClick={handleSave}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 whitespace-nowrap"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 whitespace-nowrap"
           >
             <Save className="w-4 h-4" />
             Save Profile Now
@@ -195,16 +242,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       </div>
 
       {savedNotice && (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
           Profile saved! Any new CV you create will automatically prefill with these details.
         </div>
       )}
 
       {/* Storage & Auto-Save Banner */}
-      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-600">
+      <div className="bg-sky-50/75 border border-sky-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-700">
         <div>
-          <span className="font-semibold text-slate-900">
+          <span className="font-bold text-slate-900">
             {storageStatus.providerLabel}
           </span>
           <span className="mx-2" aria-hidden="true">
@@ -212,22 +259,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </span>
           <span>{storageStatus.details}</span>
         </div>
-        <div className="font-mono-tabular text-slate-500 shrink-0">
+        <div className="font-mono-tabular text-blue-800 font-semibold shrink-0">
           {autoSaveLabel}
         </div>
       </div>
 
-      {/* Section Tabs */}
-      <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-lg">
+      {/* Color-Coded Step Tabs */}
+      <div className="flex flex-wrap gap-1.5 p-1.5 bg-white border border-sky-100 rounded-2xl">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setActiveTab(t.id)}
-            className={`px-3 py-2 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+            className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap ${
               activeTab === t.id
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
+                ? t.activeClass
+                : 'text-slate-600 hover:bg-sky-50 hover:text-slate-900'
             }`}
           >
             {t.label}
@@ -236,7 +283,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       </div>
 
       {/* Tab Content */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-6">
+      <div className={`border rounded-2xl p-6 space-y-6 ${tabPanelBg[activeTab]}`}>
         {activeTab === 'personal' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-5 pb-5 border-b border-slate-100">
@@ -299,8 +346,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   ['website', 'Personal Website / Portfolio', 'https://...'],
                 ] as const
               ).map(([field, label, placeholder]) => (
-                <div key={field}>
-                  <label className="block text-xs font-medium text-slate-800 mb-1">
+                <div key={field} className="rounded-xl border border-sky-200/80 bg-white/85 p-3.5">
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">
                     {label}
                   </label>
                   <input
@@ -313,7 +360,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       }))
                     }
                     placeholder={placeholder}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    className="w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                   <FieldHint guideKey={field} visible={showFieldGuides} />
                 </div>
@@ -906,6 +953,54 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
             <FieldHint guideKey="skills" visible={showFieldGuides} />
 
+            <div className="rounded-xl border border-violet-200 bg-white/90 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-bold text-violet-950">
+                  Quick-Add Singapore Sector Skills (১ ক্লিকে যুক্ত করুন)
+                </div>
+                <select
+                  value={presetSector}
+                  onChange={(e) => setPresetSector(e.target.value)}
+                  aria-label="Choose Singapore skill sector"
+                  className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-950"
+                >
+                  {Object.keys(SINGAPORE_SECTOR_QUICK_SKILLS).map((sec) => (
+                    <option key={sec} value={sec}>
+                      {sec}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(SINGAPORE_SECTOR_QUICK_SKILLS[presetSector] ?? []).map((skill) => {
+                  const exists = draft.skills.technical.includes(skill);
+                  return (
+                    <button
+                      key={skill}
+                      type="button"
+                      disabled={exists}
+                      onClick={() =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          skills: {
+                            ...prev.skills,
+                            technical: [...prev.skills.technical, skill],
+                          },
+                        }))
+                      }
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                        exists
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                          : 'bg-violet-50/70 border-violet-200 text-violet-900 hover:bg-violet-100'
+                      }`}
+                    >
+                      {exists ? `✓ ${skill}` : `+ ${skill}`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {(
               [
                 ['technical', 'Technical Skills'],
@@ -913,8 +1008,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 ['soft', 'Soft & Interpersonal Skills'],
               ] as const
             ).map(([cat, label]) => (
-              <div key={cat} className="space-y-2.5">
-                <label className="block text-sm font-medium text-slate-900">
+              <div key={cat} className="space-y-2.5 rounded-xl border border-violet-200/80 bg-white/85 p-4">
+                <label className="block text-sm font-bold text-slate-900">
                   {label}
                 </label>
                 <div className="flex gap-2">
@@ -931,12 +1026,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       }
                     }}
                     placeholder={`Add a ${label.toLowerCase()} item...`}
-                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="flex-1 rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm"
                   />
                   <button
                     type="button"
                     onClick={() => addSkill(cat)}
-                    className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-medium"
+                    className="px-4 py-2 rounded-lg bg-violet-700 text-white text-xs font-semibold hover:bg-violet-800"
                   >
                     Add
                   </button>
@@ -945,7 +1040,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   {draft.skills[cat].map((item, idx) => (
                     <span
                       key={`${cat}-${idx}`}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-xs text-slate-800 border border-slate-200"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 text-xs font-medium text-slate-800 border border-violet-200"
                     >
                       {item}
                       <button
@@ -1020,10 +1115,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </div>
             </div>
 
-            <div className="space-y-3 pb-6 border-b border-slate-100">
+            <div className="space-y-3 pb-6 border-b border-teal-200/70">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-900">
-                  Certifications & Trade Tickets
+                <h3 className="text-sm font-bold text-slate-900">
+                  Certifications &amp; Singapore Trade Tickets
                 </h3>
                 <button
                   type="button"
@@ -1042,12 +1137,53 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       ],
                     }))
                   }
-                  className="text-xs font-medium text-blue-700 hover:underline"
+                  className="text-xs font-semibold text-blue-700 hover:underline"
                 >
                   + Add Certification
                 </button>
               </div>
               <FieldHint guideKey="certifications" visible={showFieldGuides} />
+              <div className="rounded-xl border border-teal-200 bg-white/90 p-3.5 space-y-2">
+                <div className="text-xs font-bold text-teal-950">
+                  1-Click Singapore Certificates (সিঙ্গাপুরের জরুরি সার্টিফিকেট যুক্ত করুন)
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {SINGAPORE_CREDENTIAL_PRESETS.map((preset) => {
+                    const added = draft.certifications.some(
+                      (c) => c.name.toLowerCase() === preset.name.toLowerCase()
+                    );
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        disabled={added}
+                        onClick={() =>
+                          setDraft((p) => ({
+                            ...p,
+                            certifications: [
+                              ...p.certifications,
+                              {
+                                id: generateId('cert'),
+                                name: preset.name,
+                                issuer: preset.issuer,
+                                date: '',
+                                credentialId: '',
+                              },
+                            ],
+                          }))
+                        }
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${
+                          added
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                            : 'bg-teal-50/70 border-teal-200 text-teal-900 hover:bg-teal-100'
+                        }`}
+                      >
+                        {added ? `✓ ${preset.name.slice(0, 34)}` : `+ ${preset.name.slice(0, 34)}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               {draft.certifications.map((c) => (
                 <div key={c.id} className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center">
                   <input
@@ -1463,6 +1599,29 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
           </div>
         )}
+
+        <div className="pt-4 border-t border-slate-200/70 flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={handleSave}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 text-xs font-bold hover:bg-emerald-100"
+          >
+            <Save className="w-3.5 h-3.5" />
+            Save Step
+          </button>
+          {nextTab && (
+            <button
+              type="button"
+              onClick={() => {
+                onSaveProfile(draft);
+                setActiveTab(nextTab);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-700 text-white text-xs font-bold hover:bg-blue-800"
+            >
+              Save &amp; Continue →
+            </button>
+          )}
+        </div>
       </div>
 
       {aiModal?.open && (
