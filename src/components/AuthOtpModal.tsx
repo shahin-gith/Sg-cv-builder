@@ -33,6 +33,24 @@ interface AuthOtpModalProps {
   }) => void;
 }
 
+function formatFirebaseAuthError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err || '');
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  if (raw.includes('auth/unauthorized-domain')) {
+    return `This domain (${host || 'current URL'}) is not listed in Firebase Console → Authentication → Settings → Authorized domains. Add it there, or open the app via its authorized AI Studio / Cloud Run URL.`;
+  }
+  if (raw.includes('auth/popup-blocked')) {
+    return 'Google Sign-In popup was blocked by your browser. Please allow popups for this site and click "Continue with Google" again.';
+  }
+  if (raw.includes('auth/popup-closed-by-user') || raw.includes('auth/cancelled-popup-request')) {
+    return 'Google Sign-In window was closed before finishing. Click "Continue with Google" to try again.';
+  }
+  if (raw.includes('auth/operation-not-allowed')) {
+    return 'Google Sign-In provider is not enabled yet in Firebase Console → Authentication → Sign-in method.';
+  }
+  return raw || 'Google sign-in could not complete. Please allow popups and try again.';
+}
+
 export const AuthOtpModal: React.FC<AuthOtpModalProps> = ({
   isOpen,
   onClose,
@@ -56,11 +74,7 @@ export const AuthOtpModal: React.FC<AuthOtpModalProps> = ({
       await signInWithGooglePopup();
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Google sign-in was cancelled or blocked by popup settings. Please allow popups and try again.'
-      );
+      setError(formatFirebaseAuthError(err));
     } finally {
       setGoogleLoading(false);
     }
