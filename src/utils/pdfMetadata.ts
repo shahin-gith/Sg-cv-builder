@@ -1,4 +1,4 @@
-import { CVDocument } from '../types/cv';
+import type { CVDocument } from '../types/cv.ts';
 
 const METADATA_PREFIX = 'CAREERCRAFT_CV_V1:';
 

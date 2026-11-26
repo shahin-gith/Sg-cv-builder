@@ -9,19 +9,33 @@ import {
 } from '../types/cv';
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const attempt = async () => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  };
 
-  const data = await res.json().catch(() => ({}));
+  let { res, data } = await attempt();
+  const isTransientGatewayStatus = res.status === 404 || res.status === 502 || res.status === 503;
+  if (!res.ok && isTransientGatewayStatus && typeof data?.error !== 'string') {
+    await new Promise((r) => setTimeout(r, 700));
+    ({ res, data } = await attempt());
+  }
+
   if (!res.ok) {
-    throw new Error(
-      typeof data?.error === 'string'
-        ? data.error
-        : `Request failed with status ${res.status}`
-    );
+    if (typeof data?.error === 'string' && data.error.trim()) {
+      throw new Error(data.error);
+    }
+    if (res.status === 404) {
+      throw new Error(
+        'AI server route could not be reached (404). Please refresh the page and try again.'
+      );
+    }
+    throw new Error(`Request failed with status ${res.status}`);
   }
   return data as T;
 }
