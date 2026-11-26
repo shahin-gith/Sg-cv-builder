@@ -143,7 +143,7 @@ export function loadWorkspaceState(): WorkspaceState {
       return {
         activeView: 'dashboard',
         activeCvId: null,
-        showFieldGuides: true,
+        showFieldGuides: false,
         lastSavedAt: new Date().toISOString(),
       };
     }
@@ -152,7 +152,7 @@ export function loadWorkspaceState(): WorkspaceState {
     return {
       activeView: 'dashboard',
       activeCvId: null,
-      showFieldGuides: true,
+      showFieldGuides: false,
       lastSavedAt: new Date().toISOString(),
     };
   }

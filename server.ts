@@ -42,10 +42,88 @@ function getGeminiClient(): GoogleGenAI {
   });
 }
 
+const PRIMARY_GEMINI_MODEL = 'gemini-4-hydrogen';
+const FALLBACK_GEMINI_MODEL = 'gemini-3.1-flash-lite';
+
+function extractGeminiErrorDetails(err: unknown): { code?: number; message: string } {
+  const raw = err instanceof Error ? err.message : String(err || 'AI request failed.');
+  try {
+    const parsed = JSON.parse(raw) as { error?: { code?: number; message?: string; status?: string } };
+    if (parsed?.error) {
+      return {
+        code: typeof parsed.error.code === 'number' ? parsed.error.code : undefined,
+        message: parsed.error.message || raw,
+      };
+    }
+  } catch {
+    // Plain error string
+  }
+  const maybeStatus = (err as { status?: number })?.status;
+  return {
+    code: typeof maybeStatus === 'number' ? maybeStatus : undefined,
+    message: raw,
+  };
+}
+
+function isRetryableGeminiError(err: unknown): boolean {
+  const { code, message } = extractGeminiErrorDetails(err);
+  if (code === 404 || code === 429 || code === 500 || code === 503) return true;
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('404') ||
+    lower.includes('not_found') ||
+    lower.includes('503') ||
+    lower.includes('unavailable') ||
+    lower.includes('high demand') ||
+    lower.includes('429') ||
+    lower.includes('resource_exhausted')
+  );
+}
+
+async function generateContentWithFallback(
+  ai: GoogleGenAI,
+  buildParams: (model: string) => Parameters<GoogleGenAI['models']['generateContent']>[0]
+) {
+  try {
+    return await ai.models.generateContent(buildParams(PRIMARY_GEMINI_MODEL));
+  } catch (primaryErr) {
+    if (isRetryableGeminiError(primaryErr)) {
+      return await ai.models.generateContent(buildParams(FALLBACK_GEMINI_MODEL));
+    }
+    throw primaryErr;
+  }
+}
+
 function handleGeminiError(res: express.Response, err: unknown) {
-  const message = err instanceof Error ? err.message : 'AI request failed.';
-  const status = message.includes('GEMINI_API_KEY') ? 503 : 500;
-  res.status(status).json({ error: message });
+  const { code, message } = extractGeminiErrorDetails(err);
+  const lower = message.toLowerCase();
+
+  if (message.includes('GEMINI_API_KEY')) {
+    res.status(503).json({
+      error: 'Gemini API key is not configured. Please add GEMINI_API_KEY in Settings > Secrets.',
+    });
+    return;
+  }
+  if (code === 401 || code === 403 || lower.includes('api key') || lower.includes('permission_denied')) {
+    res.status(503).json({
+      error: 'Your Gemini API key is invalid or unauthorized. Please update GEMINI_API_KEY in Settings > Secrets.',
+    });
+    return;
+  }
+  if (code === 429 || code === 503 || lower.includes('high demand') || lower.includes('unavailable')) {
+    res.status(503).json({
+      error: 'AI service is temporarily busy due to high demand. Please try again in a few seconds.',
+    });
+    return;
+  }
+  if (code === 404 || lower.includes('not_found')) {
+    res.status(502).json({
+      error: 'AI model could not be reached right now. Please try again shortly.',
+    });
+    return;
+  }
+
+  res.status(500).json({ error: message || 'AI request failed. Please try again.' });
 }
 
 function requireBearerAuth(
@@ -355,8 +433,8 @@ app.post('/api/cv/import-pdf', async (req, res) => {
 
     // 2. Universal Gemini PDF parsing for external CV PDFs
     const ai = getGeminiClient();
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
+    const response = await generateContentWithFallback(ai, (model) => ({
+      model,
       contents: {
         parts: [
           {
@@ -470,7 +548,7 @@ app.post('/api/cv/import-pdf', async (req, res) => {
           required: ['personal', 'summary', 'experience', 'education', 'skills'],
         },
       },
-    });
+    }));
 
     const parsed = JSON.parse((response.text ?? '{}').trim());
     res.json({
@@ -505,8 +583,8 @@ app.post('/api/ai/rewrite', async (req, res) => {
       };
     };
 
-    if (!text || typeof text !== 'string' || !text.trim()) {
-      res.status(400).json({ error: 'Please provide text to analyze or rewrite.' });
+    if (!text || typeof text !== 'string' || !text.trim() || text.length > 25000) {
+      res.status(400).json({ error: 'Please provide text (under 25,000 characters) to analyze or rewrite.' });
       return;
     }
 
@@ -535,8 +613,8 @@ STRICT TRUTHFULNESS RULES:
         ? '\nNote: The input is in Bengali. Translate and summarize accurately into professional English.'
         : '';
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
+    const response = await generateContentWithFallback(ai, (model) => ({
+      model,
       contents: `${userPrompt}${langHint}`,
       config: {
         systemInstruction,
@@ -571,7 +649,7 @@ STRICT TRUTHFULNESS RULES:
           required: ['correctedText', 'explanation', 'issuesFound', 'preservedFactsNotice'],
         },
       },
-    });
+    }));
 
     const parsed = JSON.parse((response.text ?? '{}').trim());
     res.json(parsed);
@@ -590,8 +668,8 @@ app.post('/api/ai/review', async (req, res) => {
 
     const ai = getGeminiClient();
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
+    const response = await generateContentWithFallback(ai, (model) => ({
+      model,
       contents: `Review this structured CV JSON thoroughly and provide actionable feedback.\n\nCV Data:\n${JSON.stringify(cv)}`,
       config: {
         systemInstruction: `You are an experienced international HR & CV reviewer.
@@ -649,7 +727,7 @@ Never fabricate qualifications or claim guaranteed job selection or guaranteed A
           ],
         },
       },
-    });
+    }));
 
     const parsed = JSON.parse((response.text ?? '{}').trim());
     res.json(parsed);
@@ -665,15 +743,15 @@ app.post('/api/ai/optimize-job', async (req, res) => {
       jobDescription: string;
     };
 
-    if (!cv || !jobDescription?.trim()) {
-      res.status(400).json({ error: 'Both CV data and a Job Description are required.' });
+    if (!cv || !jobDescription?.trim() || jobDescription.length > 25000) {
+      res.status(400).json({ error: 'CV data and a Job Description (under 25,000 characters) are required.' });
       return;
     }
 
     const ai = getGeminiClient();
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
+    const response = await generateContentWithFallback(ai, (model) => ({
+      model,
       contents: `Analyze the following Job Description against the candidate's CV.\n\nJOB DESCRIPTION:\n${jobDescription}\n\nCANDIDATE CV:\n${JSON.stringify(cv)}`,
       config: {
         systemInstruction: `You are an ethical career advisor optimizing a candidate's CV for a specific job description.
@@ -719,7 +797,253 @@ Identify skills already present in the candidate's CV, highlight missing skills 
           ],
         },
       },
-    });
+    }));
+
+    const parsed = JSON.parse((response.text ?? '{}').trim());
+    res.json(parsed);
+  } catch (err) {
+    handleGeminiError(res, err);
+  }
+});
+
+/* ---------------- One-Box AI Custom CV Generator ---------------- */
+
+const VALID_TEMPLATE_IDS_PROMPT = [
+  'construction-worker',
+  'marine-shipyard',
+  'driver-cv',
+  'heavy-driver-logistics',
+  'hotel-hospitality',
+  'restaurant-fnb',
+  'technician-cv',
+  'process-oil-gas',
+  'skilled-worker',
+  'healthcare-nursing',
+  'security-safety',
+  'facilities-cleaning-landscape',
+  'retail-customer-service',
+  'it-digital-tech',
+  'office-admin',
+  'modern-professional',
+  'executive-cv',
+  'classic-professional',
+  'minimalist',
+  'ats-friendly',
+  'european-cv',
+  'europass-inspired',
+  'canadian-resume',
+].join(', ');
+
+app.post('/api/ai/generate-cv', async (req, res) => {
+  try {
+    const {
+      rawText,
+      targetMarket = 'auto',
+      writingStyle = 'Professional',
+    } = req.body as {
+      rawText?: string;
+      targetMarket?: string;
+      writingStyle?: string;
+    };
+
+    if (!rawText || typeof rawText !== 'string' || rawText.trim().length < 10) {
+      res.status(400).json({ error: 'Please paste or write the person’s CV details (at least 10 characters).' });
+      return;
+    }
+    if (rawText.length > 25000) {
+      res.status(400).json({ error: 'Input notes must be under 25,000 characters.' });
+      return;
+    }
+
+    const ai = getGeminiClient();
+
+    const response = await generateContentWithFallback(ai, (model) => ({
+      model,
+      contents: `Target Market Preference: ${targetMarket}
+Writing Style: ${writingStyle}
+
+PERSON'S RAW CV INFORMATION (may be Bengali, English, or mixed notes):
+${rawText}`,
+      config: {
+        systemInstruction: `You are an expert international CV architect building a clean, ready-to-customize CV from a single block of candidate notes (often written in Bengali, English, or mixed notes for Singapore, European, Canadian, or global jobs).
+
+STRICT RULES:
+1. Extract ONLY facts stated in the input. NEVER invent employers, dates, qualifications, licences, phone numbers, or achievements.
+2. If any notes are in Bengali (Bangla), translate and polish them into natural, grammatically clean ${writingStyle} English.
+3. Put email addresses ONLY in personal.email (NEVER in personal.website). Set experience[].current = true when the candidate says Present, current, এখন পর্যন্ত, or বর্তমান.
+4. For optional arrays (education, languages, certifications, training, projects, volunteer, references): if the user did NOT mention them, return an empty array [] — never insert "Not Specified" placeholders.
+5. Choose the single most fitting template ID for recommendedTemplateId from ONLY this exact list:
+${VALID_TEMPLATE_IDS_PROMPT}
+   - Example: Marine welder/fitter -> "marine-shipyard"; Construction/BCA -> "construction-worker"; Class 3 driver -> "driver-cv"; Prime mover/Class 4/5/forklift -> "heavy-driver-logistics"; Hotel -> "hotel-hospitality"; Restaurant/Chef/F&B -> "restaurant-fnb"; Electrician/HVAC/BMS -> "technician-cv"; Oil/Gas/Process -> "process-oil-gas"; Nurse/Caregiver -> "healthcare-nursing"; Security/WSH -> "security-safety"; Cleaning/Landscape -> "facilities-cleaning-landscape"; Retail -> "retail-customer-service"; IT/Software -> "it-digital-tech"; Office/Admin -> "office-admin"; Europe market -> "europass-inspired" or "european-cv"; Canada market -> "canadian-resume".
+6. Format experience dates as YYYY-MM when month & year are available, or YYYY when only year is stated, or "" if missing. Keep responsibilities concise, one bullet line per duty separated by "\\n".
+7. Write a strong 2–4 sentence Professional Summary grounded strictly in the provided facts (even if not explicitly written as a summary in the notes, synthesize one truthfully from the person's real experience & certifications).`,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            cvName: { type: Type.STRING },
+            recommendedTemplateId: { type: Type.STRING },
+            recommendedAccentColor: { type: Type.STRING },
+            templateReason: { type: Type.STRING },
+            personal: {
+              type: Type.OBJECT,
+              properties: {
+                fullName: { type: Type.STRING },
+                professionalTitle: { type: Type.STRING },
+                phone: { type: Type.STRING },
+                email: { type: Type.STRING },
+                address: { type: Type.STRING },
+                nationality: { type: Type.STRING },
+                dateOfBirth: { type: Type.STRING },
+                linkedin: { type: Type.STRING },
+                website: { type: Type.STRING },
+              },
+              required: ['fullName', 'professionalTitle'],
+            },
+            summary: { type: Type.STRING },
+            careerObjective: { type: Type.STRING },
+            experience: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  company: { type: Type.STRING },
+                  jobTitle: { type: Type.STRING },
+                  location: { type: Type.STRING },
+                  startDate: { type: Type.STRING },
+                  endDate: { type: Type.STRING },
+                  current: { type: Type.BOOLEAN },
+                  responsibilities: { type: Type.STRING },
+                  achievements: { type: Type.STRING },
+                },
+                required: ['jobTitle', 'company', 'responsibilities'],
+              },
+            },
+            education: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  institution: { type: Type.STRING },
+                  qualification: { type: Type.STRING },
+                  fieldOfStudy: { type: Type.STRING },
+                  startDate: { type: Type.STRING },
+                  graduationDate: { type: Type.STRING },
+                },
+                required: ['institution', 'qualification'],
+              },
+            },
+            skills: {
+              type: Type.OBJECT,
+              properties: {
+                technical: { type: Type.ARRAY, items: { type: Type.STRING } },
+                soft: { type: Type.ARRAY, items: { type: Type.STRING } },
+                industry: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+              required: ['technical', 'soft', 'industry'],
+            },
+            languages: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  language: { type: Type.STRING },
+                  proficiency: { type: Type.STRING },
+                },
+                required: ['language', 'proficiency'],
+              },
+            },
+            certifications: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  issuer: { type: Type.STRING },
+                  date: { type: Type.STRING },
+                  credentialId: { type: Type.STRING },
+                },
+                required: ['name'],
+              },
+            },
+            drivingLicence: {
+              type: Type.OBJECT,
+              properties: {
+                classes: { type: Type.STRING },
+                issuingCountry: { type: Type.STRING },
+                notes: { type: Type.STRING },
+              },
+              required: ['classes'],
+            },
+            training: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  provider: { type: Type.STRING },
+                  date: { type: Type.STRING },
+                  details: { type: Type.STRING },
+                },
+                required: ['title'],
+              },
+            },
+            projects: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  role: { type: Type.STRING },
+                  date: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                },
+                required: ['name'],
+              },
+            },
+            volunteer: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  organization: { type: Type.STRING },
+                  role: { type: Type.STRING },
+                  startDate: { type: Type.STRING },
+                  endDate: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                },
+                required: ['organization', 'role'],
+              },
+            },
+            references: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  title: { type: Type.STRING },
+                  company: { type: Type.STRING },
+                  contact: { type: Type.STRING },
+                },
+                required: ['name'],
+              },
+            },
+          },
+          required: [
+            'cvName',
+            'recommendedTemplateId',
+            'recommendedAccentColor',
+            'templateReason',
+            'personal',
+            'summary',
+            'experience',
+            'education',
+            'skills',
+          ],
+        },
+      },
+    }));
 
     const parsed = JSON.parse((response.text ?? '{}').trim());
     res.json(parsed);

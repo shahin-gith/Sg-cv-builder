@@ -65,8 +65,8 @@ export const TemplateGalleryView: React.FC<TemplateGalleryViewProps> = ({
           <h1 className="text-2xl font-bold text-slate-900">
             Singapore &amp; International CV Templates ({CV_TEMPLATES.length})
           </h1>
-          <p className="text-sm text-slate-700 mt-1 max-w-3xl">
-            Dedicated A4 templates for Construction, Marine &amp; Shipyard, Driving &amp; Port Logistics, Hotel &amp; Restaurant F&amp;B Management, Healthcare, Security, IT, Office, and European/Canadian formats. All templates auto-fill from your Saved Profile.
+          <p className="text-sm text-slate-700 mt-1">
+            Singapore, European &amp; global A4 templates — all auto-filled from your Saved Profile.
           </p>
         </div>
 

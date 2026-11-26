@@ -164,11 +164,34 @@ export function buildCVPdfDocument(cv: CVDocument): jsPDF {
     cursorY += extraSpacing;
   };
 
-  const addPhotoIfPresent = (x: number, y: number, w: number, h: number) => {
+  const addPhotoIfPresent = (
+    boxX: number,
+    boxY: number,
+    boxW: number,
+    boxH: number,
+    borderColor: [number, number, number] = [203, 213, 225]
+  ) => {
     if (!showPhoto || !cv.personal.photoUrl) return;
     try {
       const format = cv.personal.photoUrl.includes('image/png') ? 'PNG' : 'JPEG';
-      doc.addImage(cv.personal.photoUrl, format, x, y, w, h, undefined, 'FAST');
+      const props = doc.getImageProperties(cv.personal.photoUrl);
+      const imgRatio = props?.width && props?.height ? props.width / props.height : 1;
+      const boxRatio = boxW / boxH;
+      let drawW = boxW;
+      let drawH = boxH;
+      if (imgRatio > boxRatio) {
+        drawH = boxW / imgRatio;
+      } else {
+        drawW = boxH * imgRatio;
+      }
+      const drawX = boxX + (boxW - drawW) / 2;
+      const drawY = boxY + (boxH - drawH) / 2;
+      doc.setFillColor(248, 250, 252);
+      doc.rect(drawX, drawY, drawW, drawH, 'F');
+      doc.addImage(cv.personal.photoUrl, format, drawX, drawY, drawW, drawH, undefined, 'FAST');
+      doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
+      doc.setLineWidth(0.35);
+      doc.rect(drawX, drawY, drawW, drawH, 'S');
     } catch {
       // Skip malformed image silently rather than breaking PDF download
     }
@@ -212,7 +235,7 @@ export function buildCVPdfDocument(cv: CVDocument): jsPDF {
       (contactLines.length > 0 ? 1.5 + contactLines.length * stepMm(8.5) : 0) +
       (metaLines.length > 0 ? 1 + metaLines.length * stepMm(8) : 0);
 
-    const headerHeight = Math.max(showPhoto ? 38 : 32, 12 + textBlockHeight + 6);
+    const headerHeight = Math.max(showPhoto ? 40 : 32, 12 + textBlockHeight + 6);
     doc.setFillColor(accent[0], accent[1], accent[2]);
     doc.rect(0, 0, pageWidth, headerHeight, 'F');
 
@@ -251,13 +274,16 @@ export function buildCVPdfDocument(cv: CVDocument): jsPDF {
     }
 
     if (showPhoto) {
-      addPhotoIfPresent(pageWidth - marginX - 24, 7, 24, 24);
+      const photoW = 22;
+      const photoH = 27;
+      const photoY = Math.max(5, (headerHeight - photoH) / 2);
+      addPhotoIfPresent(pageWidth - marginX - photoW, photoY, photoW, photoH, [255, 255, 255]);
     }
     cursorY = headerHeight + 7;
   } else if (isCenteredHeader) {
     if (showPhoto) {
-      addPhotoIfPresent(pageWidth / 2 - 11, cursorY, 22, 22);
-      cursorY += 26;
+      addPhotoIfPresent(pageWidth / 2 - 10.5, cursorY, 21, 25);
+      cursorY += 29;
     }
 
     drawWrappedText(
@@ -362,8 +388,8 @@ export function buildCVPdfDocument(cv: CVDocument): jsPDF {
     }
 
     if (showPhoto) {
-      addPhotoIfPresent(pageWidth - marginX - 24, headerStartY, 24, 24);
-      cursorY = Math.max(cursorY, headerStartY + 26);
+      addPhotoIfPresent(pageWidth - marginX - 22, headerStartY, 22, 27);
+      cursorY = Math.max(cursorY, headerStartY + 29);
     }
 
     cursorY += 2;

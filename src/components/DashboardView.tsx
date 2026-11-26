@@ -9,10 +9,9 @@ import {
   FileUp,
   Pencil,
   Search,
-  ShieldCheck,
   Sparkles,
   Trash2,
-  UserCheck,
+  Wand2,
 } from 'lucide-react';
 import { CV_TEMPLATES, getTemplateById } from '../data/templates';
 import { CVDocument, UserProfile } from '../types/cv';
@@ -25,7 +24,14 @@ interface DashboardViewProps {
   firebaseUser: User | null;
   onOpenAuthModal: () => void;
   onNavigate: (
-    view: 'dashboard' | 'cvs' | 'templates' | 'profile' | 'ai-assistant' | 'review'
+    view:
+      | 'dashboard'
+      | 'smart-generator'
+      | 'cvs'
+      | 'templates'
+      | 'profile'
+      | 'ai-assistant'
+      | 'review'
   ) => void;
   onCreateNewCV: () => void;
   onOpenImportPdf: () => void;
@@ -76,11 +82,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [sortedCVs, searchQuery]);
 
   const recentCVs = sortedCVs.slice(0, 3);
-  const profileReady = Boolean(
-    profile.personal.fullName.trim() &&
-      profile.personal.phone.trim() &&
-      profile.experience.length > 0
-  );
 
   const handleDownload = async (cv: CVDocument) => {
     setExportingId(cv.id);
@@ -104,26 +105,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       {!showAllOnly && (
         <>
-          {/* Header & Primary Action */}
-          <section className="rounded-2xl border border-sky-200 bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50 p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          {/* Clean Compact Header */}
+          <section className="rounded-2xl border border-sky-200 bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50 p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-balance">
-                Build tailored CVs from one Google-synced profile
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+                CareerCraft SG Workspace
               </h1>
-              <p className="text-sm text-slate-700 mt-1.5 max-w-2xl">
-                Create role-specific CVs for Singapore Construction, Marine, Driving, Hotel &amp; Restaurant, Healthcare, Security, Tech &amp; European jobs with Bengali → English AI writing and A4 PDF export.
+              <p className="text-sm text-slate-700 mt-1">
+                23 Singapore &amp; international templates · Bengali → English AI · A4 PDF &amp; Print
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => onNavigate('smart-generator')}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 transition-colors whitespace-nowrap"
+              >
+                <Wand2 className="w-4 h-4" />
+                1-Box AI CV
+              </button>
               <button
                 type="button"
                 onClick={onCreateNewCV}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 transition-colors whitespace-nowrap"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-sky-200 bg-white text-slate-800 text-sm font-semibold hover:bg-sky-50 transition-colors whitespace-nowrap"
               >
-                <FilePlus2 className="w-4 h-4" />
+                <FilePlus2 className="w-4 h-4 text-blue-700" />
                 Create New CV
               </button>
               <button
@@ -132,21 +141,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-sky-200 bg-white text-slate-800 text-sm font-semibold hover:bg-sky-50 transition-colors whitespace-nowrap"
               >
                 <FileUp className="w-4 h-4 text-blue-700" />
-                Upload PDF to Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('profile')}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-sm font-semibold hover:bg-emerald-100 transition-colors whitespace-nowrap"
-              >
-                <UserCheck className="w-4 h-4 text-emerald-700" />
-                Edit Saved Profile
+                Import PDF
               </button>
             </div>
           </section>
 
-          {/* Simple 3-Step Guided Workflow */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Clean 4-Card Quick Action Strip */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <button
               type="button"
               onClick={onOpenAuthModal}
@@ -157,7 +158,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               }`}
             >
               <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                <span>Step 1 · Google Account</span>
+                <span>Google Cloud Sync</span>
                 {firebaseUser ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                 ) : (
@@ -165,109 +166,55 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 )}
               </div>
               <div className="text-sm font-bold text-slate-900 mt-1.5 truncate">
-                {firebaseUser
-                  ? `Connected: ${firebaseUser.email}`
-                  : 'Sign in with Google'}
+                {firebaseUser ? firebaseUser.email : 'Sign in with Google'}
               </div>
-              <div className="text-xs text-slate-700 mt-1">
-                {firebaseUser
-                  ? 'All CVs & Profile are saved in your Google Account.'
-                  : 'সাইন ইন করলে সব CV ও প্রোফাইল Google অ্যাকাউন্টে সেভ থাকবে।'}
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onNavigate('profile')}
-              className="text-left rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 hover:border-indigo-300 transition-colors"
-            >
-              <div className="flex items-center justify-between text-xs font-bold text-indigo-950">
-                <span>Step 2 · Smart Profile</span>
-                <UserCheck className="w-4 h-4 text-indigo-700" />
-              </div>
-              <div className="text-sm font-bold text-slate-900 mt-1.5">
-                {profileReady ? 'Profile Ready to Prefill' : 'Complete Your Details Once'}
-              </div>
-              <div className="text-xs text-slate-700 mt-1">
-                রঙিন সহজ ফর্ম পূরণ করলে প্রতিবার নতুন CV অটো-ফিল হবে।
+              <div className="text-xs text-slate-600 mt-0.5">
+                {firebaseUser ? 'Synced' : 'Save across devices'}
               </div>
             </button>
 
             <button
               type="button"
               onClick={() => onNavigate('templates')}
-              className="text-left rounded-2xl border border-amber-200 bg-amber-50/70 p-4 hover:border-amber-300 transition-colors"
+              className="text-left bg-amber-50/75 border border-amber-200 rounded-2xl p-4 hover:border-amber-300 transition-colors"
             >
-              <div className="flex items-center justify-between text-xs font-bold text-amber-950">
-                <span>Step 3 · Pick Sector &amp; Export PDF</span>
-                <Download className="w-4 h-4 text-amber-700" />
-              </div>
-              <div className="text-sm font-bold text-slate-900 mt-1.5">
-                {CV_TEMPLATES.length} Singapore &amp; Global Templates
-              </div>
-              <div className="text-xs text-slate-700 mt-1">
-                Construction, Marine, Driving, Hotel &amp; F&amp;B সহ সব পেশার টেমপ্লেট।
-              </div>
-            </button>
-          </section>
-
-          {/* Compact Colorful Summary Row */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-sky-50/75 border border-sky-200 rounded-2xl p-4">
-              <div className="text-xs font-semibold text-sky-900">Saved CVs</div>
-              <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
-                {cvs.length}
-              </div>
-              <div className="text-xs text-slate-600 mt-1 truncate">
-                Prefilled from {profile.personal.fullName || 'your profile'}
-              </div>
-            </div>
-
-            <div className="bg-emerald-50/75 border border-emerald-200 rounded-2xl p-4">
-              <div className="text-xs font-semibold text-emerald-900">CV Templates</div>
-              <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+              <div className="text-xs font-bold text-amber-900">Templates</div>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5 tabular-nums">
                 {CV_TEMPLATES.length}
               </div>
-              <button
-                type="button"
-                onClick={() => onNavigate('templates')}
-                className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 mt-1"
-              >
-                Browse All Job Templates →
-              </button>
-            </div>
+              <div className="text-xs text-amber-900 font-semibold mt-0.5">
+                Browse All Sectors →
+              </div>
+            </button>
 
             <button
               type="button"
               onClick={() => onNavigate('ai-assistant')}
               className="text-left bg-violet-50/75 border border-violet-200 rounded-2xl p-4 hover:border-violet-300 transition-colors"
             >
-              <div className="flex items-center justify-between text-xs font-semibold text-violet-900">
-                <span>AI Writing Assistant</span>
+              <div className="flex items-center justify-between text-xs font-bold text-violet-900">
+                <span>AI Writing</span>
                 <Sparkles className="w-4 h-4 text-violet-700" />
               </div>
               <div className="text-sm font-bold text-slate-900 mt-1.5">
-                Grammar, Rewrite &amp; বাংলা → English
+                বাংলা → English &amp; Grammar
               </div>
-              <div className="text-xs text-violet-800 font-semibold mt-1">
-                Open Writing Studio →
+              <div className="text-xs text-violet-800 font-semibold mt-0.5">
+                Open Studio →
               </div>
             </button>
 
             <button
               type="button"
-              onClick={() => onNavigate('review')}
-              className="text-left bg-teal-50/75 border border-teal-200 rounded-2xl p-4 hover:border-teal-300 transition-colors"
+              onClick={() => onNavigate('profile')}
+              className="text-left bg-emerald-50/75 border border-emerald-200 rounded-2xl p-4 hover:border-emerald-300 transition-colors"
             >
-              <div className="flex items-center justify-between text-xs font-semibold text-teal-900">
-                <span>AI CV Review &amp; Job Match</span>
-                <ShieldCheck className="w-4 h-4 text-teal-700" />
+              <div className="text-xs font-bold text-emerald-900">Saved CVs</div>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5 tabular-nums">
+                {cvs.length}
               </div>
-              <div className="text-sm font-bold text-slate-900 mt-1.5">
-                Score CVs &amp; Match Job Ads
-              </div>
-              <div className="text-xs text-teal-800 font-semibold mt-1">
-                Run CV Analysis →
+              <div className="text-xs text-emerald-800 font-semibold mt-0.5 truncate">
+                Profile: {profile.personal.fullName || 'Edit Master'} →
               </div>
             </button>
           </section>

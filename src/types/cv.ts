@@ -272,3 +272,65 @@ export interface AIJobOptimizationResponse {
   }>;
   disclaimer: string;
 }
+
+export interface AIGenerateCVResponse {
+  cvName: string;
+  recommendedTemplateId: TemplateId;
+  recommendedAccentColor: string;
+  templateReason: string;
+  personal: Partial<PersonalInfo>;
+  summary: string;
+  careerObjective: string;
+  experience: Array<{
+    company: string;
+    jobTitle: string;
+    location: string;
+    startDate: string;
+    endDate: string;
+    current: boolean;
+    responsibilities: string;
+    achievements: string;
+  }>;
+  education: Array<{
+    institution: string;
+    qualification: string;
+    fieldOfStudy: string;
+    startDate: string;
+    graduationDate: string;
+  }>;
+  skills: SkillsData;
+  languages: Array<{ language: string; proficiency: string }>;
+  certifications: Array<{
+    name: string;
+    issuer: string;
+    date: string;
+    credentialId: string;
+  }>;
+  drivingLicence: Partial<DrivingLicenceInfo>;
+  training: Array<{
+    title: string;
+    provider: string;
+    date: string;
+    details: string;
+  }>;
+  projects: Array<{
+    name: string;
+    role: string;
+    date: string;
+    description: string;
+  }>;
+  volunteer: Array<{
+    organization: string;
+    role: string;
+    startDate: string;
+    endDate: string;
+    description: string;
+  }>;
+  references: Array<{
+    name: string;
+    title: string;
+    company: string;
+    contact: string;
+  }>;
+}
+

@@ -91,14 +91,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxSide = 320;
+        const maxSide = 420;
         const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.84);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
           setDraft((prev) => ({
             ...prev,
             personal: { ...prev.personal, photoUrl: dataUrl },
@@ -199,14 +199,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Smart Profile &amp; Prefill Master
+            Smart Master Profile
           </h1>
-          <p className="text-sm text-slate-700 mt-1">
-            একবার প্রোফাইল পূরণ করুন — প্রতিবার নতুন CV তৈরি করলে সব তথ্য অটোমেটিক বসে যাবে। প্রতি ১ মিনিটে অটো-সেভ হয়।
+          <p className="text-xs text-slate-600 mt-1">
+            Auto-fills every new CV · {storageStatus.providerLabel} · {autoSaveLabel}
           </p>
         </div>
 
@@ -217,7 +217,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-sky-200 bg-white text-xs font-semibold text-slate-800 hover:bg-sky-50 whitespace-nowrap"
           >
             <BookOpen className="w-3.5 h-3.5 text-blue-700" />
-            Field Guide: {showFieldGuides ? 'On' : 'Off'}
+            Hints: {showFieldGuides ? 'On' : 'Off'}
           </button>
           <button
             type="button"
@@ -236,33 +236,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 whitespace-nowrap"
           >
             <Save className="w-4 h-4" />
-            Save Profile Now
+            Save Profile
           </button>
         </div>
       </div>
 
       {savedNotice && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-xs font-medium text-emerald-900">
           <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
-          Profile saved! Any new CV you create will automatically prefill with these details.
+          Profile saved and ready for prefill.
         </div>
       )}
-
-      {/* Storage & Auto-Save Banner */}
-      <div className="bg-sky-50/75 border border-sky-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-700">
-        <div>
-          <span className="font-bold text-slate-900">
-            {storageStatus.providerLabel}
-          </span>
-          <span className="mx-2" aria-hidden="true">
-            ·
-          </span>
-          <span>{storageStatus.details}</span>
-        </div>
-        <div className="font-mono-tabular text-blue-800 font-semibold shrink-0">
-          {autoSaveLabel}
-        </div>
-      </div>
 
       {/* Color-Coded Step Tabs */}
       <div className="flex flex-wrap gap-1.5 p-1.5 bg-white border border-sky-100 rounded-2xl">
@@ -467,9 +451,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         {activeTab === 'experience' && (
           <div className="space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-slate-500">
-                Add unlimited work experience entries. You can write rough Bengali notes and use AI to format them into clean English bullets.
-              </p>
+              <h2 className="text-sm font-bold text-emerald-950">Work History</h2>
               <button
                 type="button"
                 onClick={() =>

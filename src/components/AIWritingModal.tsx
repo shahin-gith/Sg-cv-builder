@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, Loader2, RotateCcw, Sparkles, X } from 'lucide-react';
 import { requestAIRewrite } from '../services/aiClient';
 import { AIRewriteResponse, RewriteAction, WritingStyle } from '../types/cv';
@@ -53,6 +53,17 @@ export const AIWritingModal: React.FC<AIWritingModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AIRewriteResponse | null>(null);
   const [editableOutput, setEditableOutput] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setSourceText(initialText);
+      setAction(defaultAction);
+      setSourceLanguage(defaultAction === 'bengali-to-english' ? 'bn' : 'auto');
+      setError(null);
+      setResult(null);
+      setEditableOutput('');
+    }
+  }, [isOpen, initialText, defaultAction]);
 
   if (!isOpen) return null;
 

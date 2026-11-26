@@ -1,4 +1,5 @@
 import {
+  AIGenerateCVResponse,
   AIJobOptimizationResponse,
   AIReviewResponse,
   AIRewriteResponse,
@@ -51,4 +52,12 @@ export function requestAIJobOptimization(
     cv,
     jobDescription,
   });
+}
+
+export function requestGenerateCustomCV(params: {
+  rawText: string;
+  targetMarket?: 'auto' | 'singapore' | 'europe' | 'canada' | 'global';
+  writingStyle?: WritingStyle;
+}): Promise<AIGenerateCVResponse> {
+  return postJson<AIGenerateCVResponse>('/api/ai/generate-cv', params);
 }

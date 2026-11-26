@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Sparkles,
   UserCheck,
+  Wand2,
 } from 'lucide-react';
 import { auth, firebaseProjectId, signOutFirebase } from './firebase';
 import { AIAssistantView } from './components/AIAssistantView';
@@ -21,6 +22,7 @@ import { CVReviewView } from './components/CVReviewView';
 import { DashboardView } from './components/DashboardView';
 import { ImportPdfModal } from './components/ImportPdfModal';
 import { ProfileView } from './components/ProfileView';
+import { SmartCVGeneratorView } from './components/SmartCVGeneratorView';
 import { TemplateGalleryView } from './components/TemplateGalleryView';
 import {
   bootstrapUserCloudData,
@@ -44,6 +46,7 @@ import { cloneProfileToCV, duplicateCV, renameCV } from './utils/cvLogic';
 
 type AppView =
   | 'dashboard'
+  | 'smart-generator'
   | 'cvs'
   | 'templates'
   | 'profile'
@@ -53,6 +56,7 @@ type AppView =
 
 const VALID_VIEWS: AppView[] = [
   'dashboard',
+  'smart-generator',
   'cvs',
   'templates',
   'profile',
@@ -80,7 +84,7 @@ export function App() {
     return 'dashboard';
   });
   const [showFieldGuides, setShowFieldGuides] = useState<boolean>(
-    () => initialWorkspace.current.showFieldGuides ?? true
+    () => initialWorkspace.current.showFieldGuides ?? false
   );
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -433,6 +437,13 @@ export function App() {
       activeClass: 'bg-sky-100 text-sky-900 border border-sky-200',
     },
     {
+      id: 'smart-generator',
+      label: '1-Box AI CV',
+      shortLabel: '1-Box AI',
+      icon: Wand2,
+      activeClass: 'bg-blue-100 text-blue-900 border border-blue-200',
+    },
+    {
       id: 'cvs',
       label: 'My CVs',
       shortLabel: 'My CVs',
@@ -469,7 +480,7 @@ export function App() {
     },
   ];
 
-  const mobileTabs = navItems;
+  const mobileTabs = navItems.filter((item) => item.id !== 'cvs');
 
   return (
     <div className="min-h-screen flex bg-[#f3f7ff] text-slate-900">
@@ -650,6 +661,13 @@ export function App() {
               onDuplicateCV={handleDuplicateCV}
               onRenameCV={handleRenameCV}
               onDeleteCV={handleDeleteCV}
+            />
+          )}
+
+          {view === 'smart-generator' && (
+            <SmartCVGeneratorView
+              profile={profile}
+              onCreatedCV={handleImportedPdfCV}
             />
           )}
 

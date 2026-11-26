@@ -172,14 +172,14 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxSide = 320;
+        const maxSide = 420;
         const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.84);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
           updateCV((prev) => ({
             ...prev,
             personal: { ...prev.personal, photoUrl: dataUrl },
@@ -192,13 +192,21 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
     reader.readAsDataURL(file);
   };
 
+  const handlePrint = () => {
+    try {
+      window.print();
+    } catch {
+      void handleDownloadPDF();
+    }
+  };
+
   const handleSwitchTemplate = (newId: TemplateId) => {
     updateCV((prev) => switchCVTemplate(prev, newId, true));
     setTemplateModalOpen(false);
   };
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+    <div className="print-root flex flex-col min-h-[calc(100vh-4rem)]">
       {/* Top Editor Action Bar (sticky on desktop only so mobile stays <=15% sticky height) */}
       <div className="no-print bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2.5 lg:sticky lg:top-0 z-20">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -276,8 +284,8 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 
           <button
             type="button"
-            onClick={() => window.print()}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+            onClick={handlePrint}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
           >
             <Printer className="w-3.5 h-3.5" />
             Print
@@ -324,7 +332,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
       </div>
 
       {/* Split Screen Workspace */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12">
+      <div className="print-workspace flex-1 grid grid-cols-1 lg:grid-cols-12">
         {/* LEFT PANE: FORM & CUSTOMIZATION */}
         <div
           className={`no-print lg:col-span-5 bg-white border-r border-slate-200 overflow-y-auto max-h-[calc(100vh-8rem)] ${
@@ -362,11 +370,11 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
               className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-[11px] font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0"
             >
               <BookOpen className="w-3.5 h-3.5" />
-              Guide: {showFieldGuides ? 'On' : 'Off'}
+              Hints: {showFieldGuides ? 'On' : 'Off'}
             </button>
           </div>
-          <div className="px-4 py-2 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between gap-2 text-[11px] text-slate-500">
-            <span>Device auto-save active</span>
+          <div className="px-4 py-1.5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+            <span>Auto-save active</span>
             <span className="font-mono-tabular">{autoSaveLabel}</span>
           </div>
 
@@ -1464,7 +1472,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 
         {/* RIGHT PANE: LIVE A4 PREVIEW */}
         <div
-          className={`lg:col-span-7 bg-slate-100 overflow-auto max-h-[calc(100vh-8rem)] flex flex-col ${
+          className={`print-preview-pane lg:col-span-7 bg-slate-100 overflow-auto max-h-[calc(100vh-8rem)] flex flex-col ${
             mobilePane === 'preview' ? 'block' : 'hidden lg:flex'
           }`}
         >
@@ -1504,7 +1512,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
             </div>
           </div>
 
-          <div className="p-6 flex-1 flex justify-center items-start overflow-auto">
+          <div className="print-scroll-wrap p-6 flex-1 flex justify-center items-start overflow-auto">
             <div
               className="print-only-container"
               style={{

@@ -71,16 +71,24 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
     cv.personal.website,
   ].filter((x) => x && x.trim());
 
-  const photoBox = (sizeClass = 'w-20 h-20', roundedClass = 'rounded-lg') => {
+  const photoBox = (
+    sizeClass = 'w-[78px] h-[96px]',
+    roundedClass = 'rounded-lg',
+    borderClass = 'border border-slate-200 shadow-xs'
+  ) => {
     if (!showPhoto) return null;
     if (cv.personal.photoUrl) {
       return (
-        <img
-          src={cv.personal.photoUrl}
-          alt={cv.personal.fullName || 'Profile Photo'}
-          referrerPolicy="no-referrer"
-          className={`${sizeClass} ${roundedClass} object-cover border border-slate-200 shrink-0 bg-slate-100`}
-        />
+        <div
+          className={`${sizeClass} ${roundedClass} ${borderClass} overflow-hidden shrink-0 bg-slate-100`}
+        >
+          <img
+            src={cv.personal.photoUrl}
+            alt={cv.personal.fullName || 'Profile Photo'}
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover object-top block"
+          />
+        </div>
       );
     }
     const initials = (cv.personal.fullName || 'CV')
@@ -90,7 +98,7 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
       .join('');
     return (
       <div
-        className={`${sizeClass} ${roundedClass} flex items-center justify-center font-semibold text-white shrink-0`}
+        className={`${sizeClass} ${roundedClass} ${borderClass} flex items-center justify-center font-semibold text-white shrink-0`}
         style={{ backgroundColor: accent }}
       >
         {initials || 'CV'}
@@ -501,7 +509,11 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
 
     const sideCol = (
       <aside className="w-[32%] bg-slate-50 border-slate-200 p-6 space-y-5 shrink-0" style={{ borderRightWidth: sidebarRight ? 0 : 1, borderLeftWidth: sidebarRight ? 1 : 0 }}>
-        {showPhoto && <div className="flex justify-start">{photoBox('w-24 h-24', 'rounded-xl')}</div>}
+        {showPhoto && (
+          <div className="flex justify-center pb-1">
+            {photoBox('w-[94px] h-[114px]', 'rounded-xl', 'border border-slate-200 shadow-xs')}
+          </div>
+        )}
         <div>
           <h3 className="font-bold uppercase tracking-wider mb-2" style={{ fontSize: `${baseSizePx - 0.5}px`, color: accent }}>
             Contact
@@ -618,11 +630,15 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
                   </div>
                 )}
               </div>
-              {photoBox('w-20 h-20', 'rounded-lg')}
+              {photoBox('w-[78px] h-[96px]', 'rounded-xl', 'border-2 border-white/40 shadow-sm')}
             </header>
           ) : isClassic ? (
             <header className="px-9 pt-8 pb-4 text-center border-b-2" style={{ borderColor: accent }}>
-              {showPhoto && <div className="flex justify-center mb-3">{photoBox('w-20 h-20', 'rounded-full')}</div>}
+              {showPhoto && (
+                <div className="flex justify-center mb-3">
+                  {photoBox('w-[84px] h-[84px]', 'rounded-full', 'border-2 border-slate-200 shadow-xs')}
+                </div>
+              )}
               <h1 className="font-bold text-slate-900" style={{ fontSize: `${baseSizePx * 2.1}px` }}>
                 {cv.personal.fullName || 'Your Full Name'}
               </h1>
@@ -644,12 +660,12 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
             </header>
           ) : isEuropass ? (
             <header className="px-9 pt-7 pb-4">
-              <div className="grid grid-cols-12 gap-4 items-center">
+              <div className="grid grid-cols-12 gap-4 items-start">
                 <div className="col-span-4 flex flex-col items-end pr-2">
                   <div className="font-bold tracking-wider uppercase text-right mb-2" style={{ color: accent, fontSize: `${baseSizePx - 1.5}px` }}>
                     Curriculum Vitae
                   </div>
-                  {photoBox('w-20 h-20', 'rounded-md')}
+                  {photoBox('w-[76px] h-[94px]', 'rounded-md', 'border border-slate-300 shadow-xs')}
                 </div>
                 <div className="col-span-8 min-w-0 break-words [overflow-wrap:anywhere]">
                   <h1 className="font-bold text-slate-900" style={{ fontSize: `${baseSizePx * 2.0}px` }}>
@@ -678,7 +694,7 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
             </header>
           ) : (
             <header
-              className={`px-9 pt-8 pb-4 flex items-start justify-between gap-6 ${
+              className={`px-9 pt-8 pb-4 flex items-center justify-between gap-6 ${
                 isATS ? 'border-b border-slate-900' : 'border-b border-slate-200'
               }`}
             >
@@ -714,7 +730,7 @@ export const CVDocumentRenderer: React.FC<CVDocumentRendererProps> = ({
                   </div>
                 )}
               </div>
-              {photoBox('w-20 h-20', 'rounded-lg')}
+              {photoBox('w-[78px] h-[96px]', 'rounded-lg', 'border border-slate-200 shadow-xs')}
             </header>
           )}
 
